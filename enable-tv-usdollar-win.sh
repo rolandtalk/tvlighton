@@ -24,6 +24,13 @@ for cfg_path in [Path("/etc/cloudflared/config.yml"), Path("/home/ropi/HC/deploy
         print(f"tv.usdollar.win already present in {cfg_path}")
 PY
 
+if [ -f /etc/cloudflared/cert.pem ]; then
+  echo "Routing DNS CNAME tv.usdollar.win via cloudflared..."
+  cloudflared --origincert /etc/cloudflared/cert.pem tunnel route dns dd3d8fb1-4ca9-4ec1-b147-59633ba68506 tv.usdollar.win || true
+else
+  echo "Note: /etc/cloudflared/cert.pem not present on ropihung; ensure CNAME 'tv' -> 'dd3d8fb1-4ca9-4ec1-b147-59633ba68506.cfargotunnel.com' is added in Cloudflare DNS."
+fi
+
 systemctl restart cloudflared.service
 systemctl is-active cloudflared.service
 echo "cloudflared restarted with tv.usdollar.win -> http://127.0.0.1:8010"
