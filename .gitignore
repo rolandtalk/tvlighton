@@ -1,0 +1,7 @@
+# Keep live Tapo credentials and local SQLite DB out of git
+config.json
+*.db
+*.db-journal
+__pycache__/
+*.pyc
+.DS_Store

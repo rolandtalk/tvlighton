@@ -1,0 +1,27 @@
+{
+  "tapo_credentials": {
+    "email": "your-tapo-email@example.com",
+    "password": "your-tapo-password"
+  },
+  "tapo_a_tv_sensor": {
+    "name": "Tapo A (TV Current Sensor)",
+    "ip": "192.168.31.9",
+    "mac": "EC-B9-31-25-07-E7",
+    "device_id": "703641078388d1ea1b197481d1cbbae9"
+  },
+  "tapo_b_bulb_switch": {
+    "name": "Tapo B (Bulb Switch)",
+    "ip": "192.168.31.136",
+    "mac": "EC-B9-31-24-FD-FF",
+    "device_id": "0f8ba32d18c577b38c27f77031e37e2d"
+  },
+  "automation": {
+    "subnet_prefix": "192.168.31",
+    "poll_interval_seconds": 1.5,
+    "on_threshold_watts": 10.0,
+    "off_threshold_watts": 5.0,
+    "debounce_readings": 2,
+    "turn_off_bulb_when_tv_off": true,
+    "keep_tapo_a_always_on": true
+  }
+}

@@ -1,0 +1,13 @@
+[Unit]
+Description=tvlighton - Tapo P110M TV Current Sensor (Tapo A) to Bulb Controller (Tapo B)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ropi/tvlighton
+ExecStart=/usr/bin/python3 /home/ropi/tvlighton/tvlighton.py --monitor
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

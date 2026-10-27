@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>tvlighton — Tapo A &amp; Tapo B Smart Home Console</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --panel: #111827;
+      --panel-alt: #1a2333;
+      --border: #263248;
+      --text: #f3f4f6;
+      --muted: #9ca3af;
+      --green: #10b981;
+      --green-bg: rgba(16, 185, 129, 0.14);
+      --amber: #f59e0b;
+      --amber-bg: rgba(245, 158, 11, 0.14);
+      --blue: #3b82f6;
+      --blue-bg: rgba(59, 130, 246, 0.14);
+      --red: #ef4444;
+      --red-bg: rgba(239, 68, 68, 0.14);
+      --purple: #8b5cf6;
+      --purple-bg: rgba(139, 92, 246, 0.14);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 20px;
+    }
+    .container {
+      max-width: 1360px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 24px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .brand-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #3b82f6, #10b981);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 18px;
+      color: #fff;
+    }
+    .brand h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .brand p {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .header-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--panel-alt);
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+      gap: 20px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .card-subtitle {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge-on { background: var(--green-bg); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+    .badge-off { background: rgba(156,163,175,0.12); color: var(--muted); border: 1px solid rgba(156,163,175,0.25); }
+    .badge-a { background: var(--blue-bg); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
+    .badge-b { background: var(--amber-bg); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }
+    .badge-sys { background: var(--purple-bg); color: #c084fc; border: 1px solid rgba(139,92,246,0.3); }
+    .badge-err { background: var(--red-bg); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+
+    .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .metric-box {
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .metric-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+    .metric-val {
+      font-size: 20px;
+      font-weight: 700;
+      margin-top: 4px;
+      font-variant-numeric: tabular-nums;
+    }
+    .metric-sub {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .device-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    button {
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel-alt);
+      color: var(--text);
+      transition: all 0.15s ease;
+    }
+    button:hover {
+      border-color: #4b5563;
+      background: #243044;
+    }
+    .btn-primary {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #fff;
+    }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-success {
+      background: var(--green);
+      border-color: var(--green);
+      color: #052e16;
+    }
+    .btn-success:hover { background: #059669; color: #fff; }
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.16);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+    }
+    .btn-danger:hover { background: var(--red); color: #fff; }
+
+    .summary-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .summary-item {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .summary-item .label { font-size: 12px; color: var(--muted); }
+    .summary-item .value { font-size: 22px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+    .chart-wrap {
+      width: 100%;
+      height: 190px;
+      position: relative;
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .controls-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .filters {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    select, input[type="text"], input[type="number"] {
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    .table-container {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+    th {
+      background: var(--panel-alt);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    td {
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      font-variant-numeric: tabular-nums;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255, 255, 255, 0.02); }
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+    }
+    .snapshot-cell {
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .snapshot-cell span {
+      display: inline-block;
+      margin-right: 6px;
+    }
+    .config-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+    .field label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+    .field input { width: 100%; }
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #1e293b;
+      border: 1px solid var(--blue);
+      color: #fff;
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+      display: none;
+      z-index: 1000;
+    }
+    @media (max-width: 768px) {
+      .metrics-row { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <div class="brand-icon">TV</div>
+        <div>
+          <h1>tvlighton — Smart Home Controller</h1>
+          <p>TV Current Sensor (Tapo A) &rarr; Raspberry Pi (<span id="host-label">ropihung</span>) &rarr; Bulb Switch (Tapo B)</p>
+        </div>
+      </div>
+      <div class="header-meta">
+        <span class="pill"><span class="dot" id="live-dot"></span> <span id="poll-status">Live Polling (1.5s)</span></span>
+        <span class="pill mono" id="last-updated">Updated: --:--:--</span>
+        <button onclick="refreshNow()">Refresh Now</button>
+      </div>
+    </header>
+
+    <!-- Summary Strip -->
+    <div class="summary-strip">
+      <div class="summary-item">
+        <div class="label">Total Logged Operations</div>
+        <div class="value" id="stat-total-ops">0</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Auto TV &rarr; Bulb Triggers</div>
+        <div class="value" id="stat-auto-triggers">0</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Manual Operations</div>
+        <div class="value" id="stat-manual-ops">0</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Active Rule Thresholds</div>
+        <div class="value" id="stat-thresholds">ON &ge; 10W / OFF &le; 5W</div>
+      </div>
+    </div>
+
+    <!-- Tapo A and Tapo B Live Cards -->
+    <div class="grid-2">
+      <!-- Tapo A Card -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <span class="badge badge-a">TAPO A &bull; TV SENSOR</span>
+            <h2 class="card-title" style="margin-top:8px;" id="a-nickname">WSC1F Tapo A P110M</h2>
+            <div class="card-subtitle mono" id="a-net">IP: 192.168.31.9 | MAC: EC-B9-31-25-07-E7</div>
+          </div>
+          <div id="a-relay-badge" class="badge badge-on">RELAY ON</div>
+        </div>
+        <div class="metrics-row">
+          <div class="metric-box">
+            <div class="metric-label">Live Power</div>
+            <div class="metric-val" id="a-watts">-- W</div>
+            <div class="metric-sub mono" id="a-mw">-- mW</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">TV State</div>
+            <div class="metric-val" id="a-tv-state">--</div>
+            <div class="metric-sub" id="a-streak">Streak: 0</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Today Energy</div>
+            <div class="metric-val" id="a-energy">-- Wh</div>
+            <div class="metric-sub" id="a-runtime">-- mins</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Wi-Fi RSSI</div>
+            <div class="metric-val" id="a-rssi">-- dBm</div>
+            <div class="metric-sub" id="a-latency">KLAP: -- ms</div>
+          </div>
+        </div>
+        <div class="device-footer">
+          <span>Role: Always-ON TV power &amp; current sensor</span>
+          <div class="btn-group">
+            <button onclick="controlDevice('tapo_a', true)">Ensure Tapo A ON</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tapo B Card -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <span class="badge badge-b">TAPO B &bull; BULB SWITCH</span>
+            <h2 class="card-title" style="margin-top:8px;" id="b-nickname">WSC Tapo B P110M</h2>
+            <div class="card-subtitle mono" id="b-net">IP: 192.168.31.136 | MAC: EC-B9-31-24-FD-FF</div>
+          </div>
+          <div id="b-relay-badge" class="badge badge-off">RELAY OFF</div>
+        </div>
+        <div class="metrics-row">
+          <div class="metric-box">
+            <div class="metric-label">Bulb Power</div>
+            <div class="metric-val" id="b-watts">-- W</div>
+            <div class="metric-sub mono" id="b-mw">-- mW</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Bulb Status</div>
+            <div class="metric-val" id="b-bulb-state">--</div>
+            <div class="metric-sub">Controlled by Tapo A</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Today Energy</div>
+            <div class="metric-val" id="b-energy">-- Wh</div>
+            <div class="metric-sub" id="b-runtime">-- mins</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Wi-Fi RSSI</div>
+            <div class="metric-val" id="b-rssi">-- dBm</div>
+            <div class="metric-sub" id="b-latency">KLAP: -- ms</div>
+          </div>
+        </div>
+        <div class="device-footer">
+          <span>Manual Override (Logged in Operation History):</span>
+          <div class="btn-group">
+            <button class="btn-success" onclick="controlDevice('tapo_b', true)">Turn Bulb ON</button>
+            <button class="btn-danger" onclick="controlDevice('tapo_b', false)">Turn Bulb OFF</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Real-Time Power Chart & Threshold Settings -->
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Real-Time Power Telemetry (Tapo A vs. Tapo B)</div>
+            <div class="card-subtitle">Blue = Tapo A (TV Watts) &bull; Amber = Tapo B (Bulb Watts) &bull; Dashed = ON/OFF Thresholds</div>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="power-chart"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Automation Thresholds &amp; Parameters</div>
+            <div class="card-subtitle">Changes apply immediately and are logged in Operation History</div>
+          </div>
+        </div>
+        <div class="config-grid">
+          <div class="field">
+            <label>TV ON Threshold (Watts)</label>
+            <input type="number" step="0.5" id="cfg-on-watts" value="10.0" />
+          </div>
+          <div class="field">
+            <label>TV OFF Threshold (Watts)</label>
+            <input type="number" step="0.5" id="cfg-off-watts" value="5.0" />
+          </div>
+          <div class="field">
+            <label>Poll Interval (Seconds)</label>
+            <input type="number" step="0.5" id="cfg-poll-sec" value="1.5" />
+          </div>
+          <div class="field">
+            <label>Debounce Readings</label>
+            <input type="number" step="1" id="cfg-debounce" value="2" />
+          </div>
+          <div>
+            <button class="btn-primary" style="width:100%;" onclick="saveThresholds()">Save Thresholds</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detailed Operation History Table -->
+    <div class="card">
+      <div class="controls-bar">
+        <div>
+          <div class="card-title">Tapo A &amp; Tapo B Detailed Operation History</div>
+          <div class="card-subtitle">Complete audit log of every automatic trigger, power transition, manual switch, and device state snapshot</div>
+        </div>
+        <div class="filters">
+          <select id="filter-device" onchange="loadHistory()">
+            <option value="">All Devices (Tapo A, Tapo B, System)</option>
+            <option value="TAPO_A">Tapo A (TV Sensor)</option>
+            <option value="TAPO_B">Tapo B (Bulb Switch)</option>
+            <option value="SYSTEM">System / Config</option>
+          </select>
+          <select id="filter-type" onchange="loadHistory()">
+            <option value="">All Event Types</option>
+            <option value="AUTO_TRIGGER_ON">Auto Trigger ON</option>
+            <option value="AUTO_TRIGGER_OFF">Auto Trigger OFF</option>
+            <option value="STATE_CHANGE">Device State / Power Change</option>
+            <option value="MANUAL_CONTROL">Manual Control</option>
+            <option value="SERVICE_START">Service Start / Config</option>
+            <option value="ERROR">Errors / Warnings</option>
+          </select>
+          <input type="text" id="filter-search" placeholder="Search action or reason..." oninput="renderHistoryTable()" />
+          <button onclick="exportHistoryCsv()">Export CSV</button>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Timestamp</th>
+              <th>Device</th>
+              <th>Event Type</th>
+              <th>Operation / Action</th>
+              <th>Detailed Trigger Reason</th>
+              <th>Tapo A Snapshot (TV)</th>
+              <th>Tapo B Snapshot (Bulb)</th>
+              <th>Latency</th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody">
+            <tr><td colspan="9" style="text-align:center;color:var(--muted);">Loading operation history...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let cachedHistory = [];
+    let cachedSamples = [];
+    let currentConfig = { on_threshold_watts: 10.0, off_threshold_watts: 5.0 };
+    let configInitialized = false;
+
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.style.display = 'block';
+      setTimeout(() => { el.style.display = 'none'; }, 3200);
+    }
+
+    function deviceBadge(dev) {
+      if (dev === 'TAPO_A') return '<span class="badge badge-a">TAPO A</span>';
+      if (dev === 'TAPO_B') return '<span class="badge badge-b">TAPO B</span>';
+      return '<span class="badge badge-sys">SYSTEM</span>';
+    }
+
+    function eventBadge(ev) {
+      if (ev === 'AUTO_TRIGGER_ON') return '<span class="badge badge-on">AUTO ON</span>';
+      if (ev === 'AUTO_TRIGGER_OFF') return '<span class="badge badge-off">AUTO OFF</span>';
+      if (ev === 'MANUAL_CONTROL') return '<span class="badge badge-b">MANUAL</span>';
+      if (ev === 'STATE_CHANGE') return '<span class="badge badge-a">STATE CHANGE</span>';
+      if (ev === 'ERROR') return '<span class="badge badge-err">ERROR</span>';
+      return `<span class="badge badge-sys">${ev}</span>`;
+    }
+
+    async function fetchStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+
+        document.getElementById('host-label').textContent = data.hostname || 'ropihung';
+        document.getElementById('last-updated').textContent = 'Updated: ' + (data.timestamp || '--');
+
+        const a = data.tapo_a || {};
+        const b = data.tapo_b || {};
+        const cfg = data.automation || {};
+        currentConfig = cfg;
+
+        if (!configInitialized && cfg.on_threshold_watts !== undefined) {
+          document.getElementById('cfg-on-watts').value = cfg.on_threshold_watts;
+          document.getElementById('cfg-off-watts').value = cfg.off_threshold_watts;
+          document.getElementById('cfg-poll-sec').value = cfg.poll_interval_seconds;
+          document.getElementById('cfg-debounce').value = cfg.debounce_readings;
+          configInitialized = true;
+        }
+
+        document.getElementById('stat-thresholds').textContent =
+          `ON ≥ ${cfg.on_threshold_watts}W / OFF ≤ ${cfg.off_threshold_watts}W`;
+
+        // Update Tapo A
+        document.getElementById('a-nickname').textContent = a.nickname || 'WSC1F Tapo A P110M';
+        document.getElementById('a-net').textContent = `IP: ${a.ip || '--'} | MAC: ${a.mac || '--'}`;
+        const aRelay = document.getElementById('a-relay-badge');
+        aRelay.textContent = a.relay_on ? 'RELAY ON' : 'RELAY OFF';
+        aRelay.className = 'badge ' + (a.relay_on ? 'badge-on' : 'badge-off');
+        document.getElementById('a-watts').textContent = (a.watts !== undefined ? a.watts.toFixed(2) : '--') + ' W';
+        document.getElementById('a-mw').textContent = (a.mw !== undefined ? a.mw : '--') + ' mW';
+        const tvActive = (a.watts || 0) >= (cfg.on_threshold_watts || 10);
+        document.getElementById('a-tv-state').textContent = tvActive ? 'TV ACTIVE' : 'STANDBY / OFF';
+        document.getElementById('a-tv-state').style.color = tvActive ? 'var(--green)' : 'var(--muted)';
+        document.getElementById('a-streak').textContent = `High: ${data.high_streak || 0} | Low: ${data.low_streak || 0}`;
+        document.getElementById('a-energy').textContent = (a.today_wh ?? '--') + ' Wh';
+        document.getElementById('a-runtime').textContent = (a.today_runtime ?? '--') + ' mins today';
+        document.getElementById('a-rssi').textContent = (a.rssi ?? '--') + ' dBm';
+        document.getElementById('a-latency').textContent = `KLAP: ${a.latency_ms ?? '--'} ms`;
+
+        // Update Tapo B
+        document.getElementById('b-nickname').textContent = b.nickname || 'WSC Tapo B P110M';
+        document.getElementById('b-net').textContent = `IP: ${b.ip || '--'} | MAC: ${b.mac || '--'}`;
+        const bRelay = document.getElementById('b-relay-badge');
+        bRelay.textContent = b.relay_on ? 'RELAY ON' : 'RELAY OFF';
+        bRelay.className = 'badge ' + (b.relay_on ? 'badge-on' : 'badge-off');
+        document.getElementById('b-watts').textContent = (b.watts !== undefined ? b.watts.toFixed(2) : '--') + ' W';
+        document.getElementById('b-mw').textContent = (b.mw !== undefined ? b.mw : '--') + ' mW';
+        document.getElementById('b-bulb-state').textContent = b.relay_on ? 'BULB LIT' : 'BULB OFF';
+        document.getElementById('b-bulb-state').style.color = b.relay_on ? 'var(--amber)' : 'var(--muted)';
+        document.getElementById('b-energy').textContent = (b.today_wh ?? '--') + ' Wh';
+        document.getElementById('b-runtime').textContent = (b.today_runtime ?? '--') + ' mins today';
+        document.getElementById('b-rssi').textContent = (b.rssi ?? '--') + ' dBm';
+        document.getElementById('b-latency').textContent = `KLAP: ${b.latency_ms ?? '--'} ms`;
+
+        if (data.stats) {
+          document.getElementById('stat-total-ops').textContent = data.stats.total_ops || 0;
+          document.getElementById('stat-auto-triggers').textContent = data.stats.auto_triggers || 0;
+          document.getElementById('stat-manual-ops').textContent = data.stats.manual_ops || 0;
+        }
+
+        if (data.recent_samples) {
+          cachedSamples = data.recent_samples;
+          drawChart();
+        }
+      } catch (err) {
+        console.error('Status fetch error:', err);
+      }
+    }
+
+    async function loadHistory() {
+      try {
+        const dev = document.getElementById('filter-device').value;
+        const ev = document.getElementById('filter-type').value;
+        const params = new URLSearchParams({ limit: '200' });
+        if (dev) params.set('device', dev);
+        if (ev) params.set('event_type', ev);
+        const res = await fetch('/api/history?' + params.toString());
+        const data = await res.json();
+        cachedHistory = data.items || [];
+        renderHistoryTable();
+      } catch (err) {
+        console.error('History fetch error:', err);
+      }
+    }
+
+    function renderHistoryTable() {
+      const q = (document.getElementById('filter-search').value || '').toLowerCase().trim();
+      const tbody = document.getElementById('history-tbody');
+      const rows = cachedHistory.filter(item => {
+        if (!q) return true;
+        return (
+          (item.action || '').toLowerCase().includes(q) ||
+          (item.trigger_reason || '').toLowerCase().includes(q) ||
+          (item.event_type || '').toLowerCase().includes(q) ||
+          (item.timestamp || '').toLowerCase().includes(q)
+        );
+      });
+
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);">No matching operations found.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = rows.map(r => {
+        const aState = r.tapo_a_relay ? '<b style="color:var(--green)">ON</b>' : '<b style="color:var(--muted)">OFF</b>';
+        const bState = r.tapo_b_relay ? '<b style="color:var(--amber)">ON</b>' : '<b style="color:var(--muted)">OFF</b>';
+        return `
+          <tr>
+            <td class="mono">#${r.id}</td>
+            <td class="mono" style="white-space:nowrap;">${r.timestamp}</td>
+            <td>${deviceBadge(r.device)}</td>
+            <td>${eventBadge(r.event_type)}</td>
+            <td style="font-weight:600;">${r.action}</td>
+            <td style="color:#d1d5db;max-width:340px;">${r.trigger_reason || ''}</td>
+            <td class="snapshot-cell mono">
+              <span>Relay: ${aState}</span>
+              <span><b>${Number(r.tapo_a_watts || 0).toFixed(2)}W</b> (${r.tapo_a_mw || 0}mW)</span><br/>
+              <span style="color:var(--muted)">Today: ${r.tapo_a_today_wh ?? 0}Wh | RSSI: ${r.tapo_a_rssi ?? '--'}dBm</span>
+            </td>
+            <td class="snapshot-cell mono">
+              <span>Relay: ${bState}</span>
+              <span><b>${Number(r.tapo_b_watts || 0).toFixed(2)}W</b> (${r.tapo_b_mw || 0}mW)</span><br/>
+              <span style="color:var(--muted)">Today: ${r.tapo_b_today_wh ?? 0}Wh | RSSI: ${r.tapo_b_rssi ?? '--'}dBm</span>
+            </td>
+            <td class="mono">${r.latency_ms ? r.latency_ms + ' ms' : '--'}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function controlDevice(target, turnOn) {
+      try {
+        const res = await fetch('/api/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target, state: turnOn })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(data.message || 'Command executed');
+          await fetchStatus();
+          await loadHistory();
+        } else {
+          showToast('Error: ' + (data.error || 'Unknown error'));
+        }
+      } catch (err) {
+        showToast('Request failed: ' + err);
+      }
+    }
+
+    async function saveThresholds() {
+      try {
+        const payload = {
+          on_threshold_watts: parseFloat(document.getElementById('cfg-on-watts').value),
+          off_threshold_watts: parseFloat(document.getElementById('cfg-off-watts').value),
+          poll_interval_seconds: parseFloat(document.getElementById('cfg-poll-sec').value),
+          debounce_readings: parseInt(document.getElementById('cfg-debounce').value, 10)
+        };
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('Thresholds updated & saved');
+          await fetchStatus();
+          await loadHistory();
+        } else {
+          showToast('Error: ' + (data.error || 'Failed to update config'));
+        }
+      } catch (err) {
+        showToast('Save error: ' + err);
+      }
+    }
+
+    function drawChart() {
+      const canvas = document.getElementById('power-chart');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+
+      const W = rect.width;
+      const H = rect.height;
+      ctx.clearRect(0, 0, W, H);
+
+      if (!cachedSamples.length) return;
+      const samples = cachedSamples.slice(-60);
+      const maxW = Math.max(
+        20,
+        currentConfig.on_threshold_watts * 1.3,
+        ...samples.map(s => Math.max(s.a_w || 0, s.b_w || 0))
+      );
+
+      const padL = 38, padR = 12, padT = 12, padB = 22;
+      const plotW = W - padL - padR;
+      const plotH = H - padT - padB;
+
+      const yOf = w => padT + plotH - (Math.min(w, maxW) / maxW) * plotH;
+      const xOf = (i, n) => padL + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+
+      // Grid lines
+      ctx.strokeStyle = '#1f2937';
+      ctx.lineWidth = 1;
+      [0, maxW / 2, maxW].forEach(val => {
+        const y = yOf(val);
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(W - padR, y);
+        ctx.stroke();
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '10px sans-serif';
+        ctx.fillText(val.toFixed(0) + 'W', 4, y + 3);
+      });
+
+      // Threshold lines
+      const yOn = yOf(currentConfig.on_threshold_watts || 10);
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.5)';
+      ctx.beginPath(); ctx.moveTo(padL, yOn); ctx.lineTo(W - padR, yOn); ctx.stroke();
+
+      const yOff = yOf(currentConfig.off_threshold_watts || 5);
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+      ctx.beginPath(); ctx.moveTo(padL, yOff); ctx.lineTo(W - padR, yOff); ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Tapo A line (Blue)
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      samples.forEach((s, i) => {
+        const x = xOf(i, samples.length);
+        const y = yOf(s.a_w || 0);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      // Tapo B line (Amber)
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      samples.forEach((s, i) => {
+        const x = xOf(i, samples.length);
+        const y = yOf(s.b_w || 0);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    }
+
+    function exportHistoryCsv() {
+      if (!cachedHistory.length) return;
+      const headers = [
+        'id','timestamp','device','event_type','action','trigger_reason',
+        'tapo_a_relay','tapo_a_watts','tapo_a_mw','tapo_a_today_wh','tapo_a_rssi',
+        'tapo_b_relay','tapo_b_watts','tapo_b_mw','tapo_b_today_wh','tapo_b_rssi','latency_ms'
+      ];
+      const csv = [
+        headers.join(','),
+        ...cachedHistory.map(r => headers.map(h => JSON.stringify(r[h] ?? '')).join(','))
+      ].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'tvlighton_operation_history.csv';
+      a.click();
+    }
+
+    function refreshNow() {
+      fetchStatus();
+      loadHistory();
+    }
+
+    refreshNow();
+    setInterval(fetchStatus, 2000);
+    setInterval(loadHistory, 4000);
+    window.addEventListener('resize', drawChart);
+  </script>
+</body>
+</html>
