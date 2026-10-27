@@ -397,6 +397,11 @@ def make_http_handler(runtime: TvLightOnRuntime):
             self.end_headers()
             self.wfile.write(raw)
 
+        def do_HEAD(self) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+
         def do_GET(self) -> None:
             parsed = urllib.parse.urlparse(self.path)
             path = parsed.path
