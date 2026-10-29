@@ -92,6 +92,19 @@
       border: 1px solid var(--border);
       background: var(--panel-alt);
     }
+    .nav-link {
+      display: inline-flex;
+      align-items: center;
+      padding: 7px 13px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel-alt);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+    .nav-link:hover { border-color: #4b5563; background: #243044; }
     .dot {
       width: 8px;
       height: 8px;
@@ -149,6 +162,7 @@
       gap: 12px;
       margin-bottom: 16px;
     }
+    .overview-metrics { grid-template-columns: repeat(2, 1fr); }
     .metric-box {
       background: var(--panel-alt);
       border: 1px solid var(--border);
@@ -228,6 +242,8 @@
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 12px;
     }
+    .overview-summary { display: block; }
+    .overview-summary .camera-light { max-width: 600px; margin: 0 auto; }
     .summary-item {
       background: var(--panel);
       border: 1px solid var(--border);
@@ -532,19 +548,16 @@
       </div>
       <div class="header-meta">
         <span class="pill"><span class="dot" id="live-dot"></span> <span id="poll-status">Live Polling (1.5s)</span></span>
+        <a class="nav-link" href="/detail">Detail</a>
       </div>
     </header>
 
     <!-- Summary Strip -->
-    <div class="summary-strip">
+    <div class="summary-strip overview-summary">
       <div class="summary-item camera-light" title="Estimated ambient lux from the CCX camera auto-exposure metadata.">
         <div class="label">CCX Camera Light</div>
         <div class="value" id="camera-light-value">-- lux</div>
         <div class="detail" id="camera-light-detail">Waiting for camera sample</div>
-      </div>
-      <div class="summary-item">
-        <div class="label">Active Rule Thresholds</div>
-        <div class="value" id="stat-thresholds">ON &ge; 10W / OFF &le; 5W</div>
       </div>
     </div>
 
@@ -560,7 +573,7 @@
           </div>
           <div id="a-relay-badge" class="badge badge-on">RELAY ON</div>
         </div>
-        <div class="metrics-row">
+        <div class="metrics-row overview-metrics">
           <div class="metric-box">
             <div class="metric-label">Live Power</div>
             <div class="metric-val" id="a-watts">-- W</div>
@@ -570,22 +583,6 @@
             <div class="metric-label">TV State</div>
             <div class="metric-val" id="a-tv-state">--</div>
             <div class="metric-sub" id="a-streak">Streak: 0</div>
-          </div>
-          <div class="metric-box">
-            <div class="metric-label">Today Energy</div>
-            <div class="metric-val" id="a-energy">-- Wh</div>
-            <div class="metric-sub" id="a-runtime">-- mins</div>
-          </div>
-          <div class="metric-box">
-            <div class="metric-label">Wi-Fi RSSI</div>
-            <div class="metric-val" id="a-rssi">-- dBm</div>
-            <div class="metric-sub" id="a-latency">KLAP: -- ms</div>
-          </div>
-        </div>
-        <div class="device-footer">
-          <span>Role: Always-ON TV power &amp; current sensor</span>
-          <div class="btn-group">
-            <button onclick="controlDevice('tapo_a', true)">Ensure Tapo A ON</button>
           </div>
         </div>
       </div>
@@ -600,7 +597,7 @@
           </div>
           <div id="b-relay-badge" class="badge badge-off">RELAY OFF</div>
         </div>
-        <div class="metrics-row">
+        <div class="metrics-row overview-metrics">
           <div class="metric-box">
             <div class="metric-label">Bulb Power</div>
             <div class="metric-val" id="b-watts">-- W</div>
@@ -611,41 +608,12 @@
             <div class="metric-val" id="b-bulb-state">--</div>
             <div class="metric-sub">Controlled by Tapo A</div>
           </div>
-          <div class="metric-box">
-            <div class="metric-label">Today Energy</div>
-            <div class="metric-val" id="b-energy">-- Wh</div>
-            <div class="metric-sub" id="b-runtime">-- mins</div>
-          </div>
-          <div class="metric-box">
-            <div class="metric-label">Wi-Fi RSSI</div>
-            <div class="metric-val" id="b-rssi">-- dBm</div>
-            <div class="metric-sub" id="b-latency">KLAP: -- ms</div>
-          </div>
-        </div>
-        <div class="device-footer">
-          <span>Manual Override (Logged in Operation History):</span>
-          <div class="btn-group">
-            <button class="btn-success" onclick="controlDevice('tapo_b', true)">Turn Bulb ON</button>
-            <button class="btn-danger" onclick="controlDevice('tapo_b', false)">Turn Bulb OFF</button>
-          </div>
         </div>
       </div>
     </div>
 
-    <!-- Real-Time Power Chart & Threshold Settings -->
-    <div class="grid-2">
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">Real-Time Power Telemetry (Tapo A vs. Tapo B)</div>
-            <div class="card-subtitle">Blue = Tapo A (TV Watts) &bull; Amber = Tapo B (Bulb Watts) &bull; Dashed = ON/OFF Thresholds</div>
-          </div>
-        </div>
-        <div class="chart-wrap">
-          <canvas id="power-chart"></canvas>
-        </div>
-      </div>
-
+    <!-- Threshold Settings -->
+    <div>
       <div class="card">
         <div class="card-header">
           <div>
@@ -673,14 +641,6 @@
               <input type="range" min="0" max="4" step="1" id="cfg-lux" value="3" oninput="syncRangeLabels()" aria-label="Maximum Light-On Lux" />
             </div>
             <div class="range-scale" aria-hidden="true"><span>0</span><span>15</span><span>30</span><span>60</span><span>120</span></div>
-          </div>
-          <div class="field">
-            <label>Poll Interval (Seconds)</label>
-            <input type="number" step="0.5" id="cfg-poll-sec" value="1.5" />
-          </div>
-          <div class="field">
-            <label>Debounce Readings</label>
-            <input type="number" step="1" id="cfg-debounce" value="2" />
           </div>
           <div>
             <button class="btn-primary" style="width:100%;" onclick="saveThresholds()">Save Thresholds</button>
@@ -833,14 +793,9 @@
           document.getElementById('cfg-on-max').value = nearestScaleIndex(tvOnScale, cfg.on_max_watts ?? 120);
           document.getElementById('cfg-off-watts').value = cfg.off_threshold_watts;
           document.getElementById('cfg-lux').value = nearestLuxIndex(cfg.lux_threshold ?? 60);
-          document.getElementById('cfg-poll-sec').value = cfg.poll_interval_seconds;
-          document.getElementById('cfg-debounce').value = cfg.debounce_readings;
           syncRangeLabels();
           configInitialized = true;
         }
-
-        document.getElementById('stat-thresholds').textContent =
-          `ON ${cfg.on_threshold_watts}–${cfg.on_max_watts ?? 120}W / OFF ≤ ${cfg.off_threshold_watts}W / Lux 0–${cfg.lux_threshold ?? 60}`;
 
         const lightValue = document.getElementById('camera-light-value');
         const lightDetail = document.getElementById('camera-light-detail');
@@ -869,10 +824,6 @@
         document.getElementById('a-tv-state').textContent = tvActive ? 'TV ACTIVE' : 'STANDBY / OFF';
         document.getElementById('a-tv-state').style.color = tvActive ? 'var(--green)' : 'var(--muted)';
         document.getElementById('a-streak').textContent = `High: ${data.high_streak || 0} | Low: ${data.low_streak || 0}`;
-        document.getElementById('a-energy').textContent = (a.today_wh ?? '--') + ' Wh';
-        document.getElementById('a-runtime').textContent = (a.today_runtime ?? '--') + ' mins today';
-        document.getElementById('a-rssi').textContent = (a.rssi ?? '--') + ' dBm';
-        document.getElementById('a-latency').textContent = `KLAP: ${a.latency_ms ?? '--'} ms`;
 
         // Update Tapo B
         document.getElementById('b-nickname').textContent = b.nickname || 'WSC Tapo B P110M';
@@ -884,10 +835,6 @@
         document.getElementById('b-mw').textContent = (b.mw !== undefined ? b.mw : '--') + ' mW';
         document.getElementById('b-bulb-state').textContent = b.relay_on ? 'BULB LIT' : 'BULB OFF';
         document.getElementById('b-bulb-state').style.color = b.relay_on ? 'var(--amber)' : 'var(--muted)';
-        document.getElementById('b-energy').textContent = (b.today_wh ?? '--') + ' Wh';
-        document.getElementById('b-runtime').textContent = (b.today_runtime ?? '--') + ' mins today';
-        document.getElementById('b-rssi').textContent = (b.rssi ?? '--') + ' dBm';
-        document.getElementById('b-latency').textContent = `KLAP: ${b.latency_ms ?? '--'} ms`;
 
         if (data.recent_samples) {
           cachedSamples = data.recent_samples;
@@ -985,9 +932,7 @@
           on_threshold_watts: tvOnScale[Number(document.getElementById('cfg-on-min').value)],
           on_max_watts: tvOnScale[Number(document.getElementById('cfg-on-max').value)],
           off_threshold_watts: parseFloat(document.getElementById('cfg-off-watts').value),
-          lux_threshold: luxScale[Number(document.getElementById('cfg-lux').value)],
-          poll_interval_seconds: parseFloat(document.getElementById('cfg-poll-sec').value),
-          debounce_readings: parseInt(document.getElementById('cfg-debounce').value, 10)
+          lux_threshold: luxScale[Number(document.getElementById('cfg-lux').value)]
         };
         const res = await fetch('/api/config', {
           method: 'POST',

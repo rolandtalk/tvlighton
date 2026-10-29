@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>tvlighton — Detail</title>
+  <style>
+    :root {
+      --bg: #0b0f19; --panel: #111827; --panel-alt: #1a2333; --border: #263248;
+      --text: #f3f4f6; --muted: #9ca3af; --green: #10b981; --amber: #f59e0b;
+      --blue: #3b82f6; --red: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.5; padding: 20px;
+    }
+    .container { max-width: 1360px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+    header {
+      display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px 24px;
+    }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand-icon {
+      width: 42px; height: 42px; border-radius: 10px; background: linear-gradient(135deg, #3b82f6, #10b981);
+      display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px;
+    }
+    .brand h1 { font-size: 20px; letter-spacing: -0.02em; }
+    .brand p, .card-subtitle, .metric-sub { color: var(--muted); font-size: 12px; }
+    .header-meta, .btn-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .pill, .nav-link {
+      display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border: 1px solid var(--border);
+      border-radius: 999px; background: var(--panel-alt); color: var(--text); font-size: 12px; font-weight: 700;
+      text-decoration: none;
+    }
+    .nav-link { border-radius: 8px; font-size: 13px; }
+    .nav-link:hover { border-color: #4b5563; background: #243044; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+    .card-header { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    .card-title { font-size: 16px; font-weight: 700; }
+    .badge {
+      display: inline-flex; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700;
+      letter-spacing: .04em; text-transform: uppercase;
+    }
+    .badge-a { background: rgba(59,130,246,.14); color: #60a5fa; border: 1px solid rgba(59,130,246,.3); }
+    .badge-b { background: rgba(245,158,11,.14); color: #fbbf24; border: 1px solid rgba(245,158,11,.3); }
+    .summary-item { max-width: 760px; margin: 0 auto; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; }
+    .summary-item .label { color: var(--muted); font-size: 12px; }
+    .summary-item .value { margin-top: 4px; font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .metrics-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .metric-box { background: var(--panel-alt); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+    .metric-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+    .metric-val { margin-top: 4px; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .device-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+    button {
+      cursor: pointer; font: 600 13px inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--panel-alt); color: var(--text);
+    }
+    button:hover { border-color: #4b5563; background: #243044; }
+    .btn-primary { background: var(--blue); border-color: var(--blue); color: white; }
+    .btn-success { background: var(--green); border-color: var(--green); color: #052e16; }
+    .btn-danger { background: rgba(239,68,68,.16); border-color: rgba(239,68,68,.4); color: #fca5a5; }
+    .chart-wrap { width: 100%; height: 260px; background: var(--panel-alt); border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+    canvas { width: 100%; height: 100%; display: block; }
+    .config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; align-items: end; }
+    .field label { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; }
+    input[type="number"] { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-alt); color: var(--text); font: inherit; }
+    .toast { position: fixed; right: 20px; bottom: 20px; display: none; padding: 12px 18px; border: 1px solid var(--blue); border-radius: 10px; background: #1e293b; font-size: 13px; font-weight: 600; }
+    @media (max-width: 600px) {
+      body { padding: 14px; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .summary-item .value { font-size: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <div class="brand-icon">TV</div>
+        <div><h1>tvlighton — Detail</h1><p>Diagnostics, telemetry, manual controls &amp; runtime parameters</p></div>
+      </div>
+      <div class="header-meta">
+        <span class="pill"><span class="dot"></span> <span id="poll-status">Live Polling</span></span>
+        <a class="nav-link" href="/">Overview</a>
+      </div>
+    </header>
+
+    <div class="summary-item">
+      <div class="label">Active Rule Thresholds</div>
+      <div class="value" id="stat-thresholds">Loading…</div>
+    </div>
+
+    <div class="grid-2">
+      <section class="card">
+        <div class="card-header"><div><span class="badge badge-a">Tapo A Diagnostics</span><div class="card-subtitle" id="a-name" style="margin-top:8px;">TV Sensor</div></div></div>
+        <div class="metrics-row">
+          <div class="metric-box"><div class="metric-label">Today Energy</div><div class="metric-val" id="a-energy">-- Wh</div><div class="metric-sub" id="a-runtime">-- mins</div></div>
+          <div class="metric-box"><div class="metric-label">Wi-Fi RSSI</div><div class="metric-val" id="a-rssi">-- dBm</div><div class="metric-sub" id="a-latency">KLAP: -- ms</div></div>
+        </div>
+        <div class="device-footer"><span>Role: Always-ON TV power &amp; current sensor</span><button onclick="controlDevice('tapo_a', true)">Ensure Tapo A ON</button></div>
+      </section>
+
+      <section class="card">
+        <div class="card-header"><div><span class="badge badge-b">Tapo B Diagnostics</span><div class="card-subtitle" id="b-name" style="margin-top:8px;">Bulb Switch</div></div></div>
+        <div class="metrics-row">
+          <div class="metric-box"><div class="metric-label">Today Energy</div><div class="metric-val" id="b-energy">-- Wh</div><div class="metric-sub" id="b-runtime">-- mins</div></div>
+          <div class="metric-box"><div class="metric-label">Wi-Fi RSSI</div><div class="metric-val" id="b-rssi">-- dBm</div><div class="metric-sub" id="b-latency">KLAP: -- ms</div></div>
+        </div>
+        <div class="device-footer"><span>Manual Override (logged in history)</span><div class="btn-group"><button class="btn-success" onclick="controlDevice('tapo_b', true)">Turn Bulb ON</button><button class="btn-danger" onclick="controlDevice('tapo_b', false)">Turn Bulb OFF</button></div></div>
+      </section>
+    </div>
+
+    <section class="card">
+      <div class="card-header"><div><div class="card-title">Real-Time Power Telemetry (Tapo A vs. Tapo B)</div><div class="card-subtitle">Blue = Tapo A &bull; Amber = Tapo B &bull; Dashed = TV On Range / OFF threshold</div></div></div>
+      <div class="chart-wrap"><canvas id="power-chart"></canvas></div>
+    </section>
+
+    <section class="card">
+      <div class="card-header"><div><div class="card-title">Runtime Parameters</div><div class="card-subtitle">Advanced polling and debounce controls moved from Overview</div></div></div>
+      <div class="config-grid">
+        <div class="field"><label for="cfg-poll-sec">Poll Interval (Seconds)</label><input type="number" min="0.5" step="0.5" id="cfg-poll-sec" value="1.5" /></div>
+        <div class="field"><label for="cfg-debounce">Debounce Readings</label><input type="number" min="1" step="1" id="cfg-debounce" value="2" /></div>
+        <button class="btn-primary" onclick="saveRuntimeParameters()">Save Runtime Parameters</button>
+      </div>
+    </section>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let currentConfig = {};
+    let cachedSamples = [];
+    let configInitialized = false;
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.style.display = 'block';
+      setTimeout(() => { toast.style.display = 'none'; }, 3200);
+    }
+
+    async function fetchStatus() {
+      try {
+        const response = await fetch('/api/status');
+        const data = await response.json();
+        const a = data.tapo_a || {};
+        const b = data.tapo_b || {};
+        const cfg = data.automation || {};
+        currentConfig = cfg;
+        document.getElementById('poll-status').textContent = `Live Polling (${cfg.poll_interval_seconds ?? '--'}s)`;
+        document.getElementById('stat-thresholds').textContent =
+          `ON ${cfg.on_threshold_watts}–${cfg.on_max_watts ?? 120}W / OFF ≤ ${cfg.off_threshold_watts}W / Lux 0–${cfg.lux_threshold ?? 60}`;
+        document.getElementById('a-name').textContent = a.nickname || 'Tapo A TV Sensor';
+        document.getElementById('a-energy').textContent = `${a.today_wh ?? '--'} Wh`;
+        document.getElementById('a-runtime').textContent = `${a.today_runtime ?? '--'} mins today`;
+        document.getElementById('a-rssi').textContent = `${a.rssi ?? '--'} dBm`;
+        document.getElementById('a-latency').textContent = `KLAP: ${a.latency_ms ?? '--'} ms`;
+        document.getElementById('b-name').textContent = b.nickname || 'Tapo B Bulb Switch';
+        document.getElementById('b-energy').textContent = `${b.today_wh ?? '--'} Wh`;
+        document.getElementById('b-runtime').textContent = `${b.today_runtime ?? '--'} mins today`;
+        document.getElementById('b-rssi').textContent = `${b.rssi ?? '--'} dBm`;
+        document.getElementById('b-latency').textContent = `KLAP: ${b.latency_ms ?? '--'} ms`;
+        if (!configInitialized) {
+          document.getElementById('cfg-poll-sec').value = cfg.poll_interval_seconds ?? 1.5;
+          document.getElementById('cfg-debounce').value = cfg.debounce_readings ?? 2;
+          configInitialized = true;
+        }
+        cachedSamples = data.recent_samples || [];
+        drawChart();
+      } catch (error) {
+        console.error('Detail status error:', error);
+      }
+    }
+
+    async function controlDevice(target, state) {
+      try {
+        const response = await fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target, state }) });
+        const data = await response.json();
+        showToast(data.ok ? (data.message || 'Command executed') : `Error: ${data.error || 'Command failed'}`);
+        if (data.ok) await fetchStatus();
+      } catch (error) { showToast(`Request failed: ${error}`); }
+    }
+
+    async function saveRuntimeParameters() {
+      const payload = {
+        poll_interval_seconds: parseFloat(document.getElementById('cfg-poll-sec').value),
+        debounce_readings: parseInt(document.getElementById('cfg-debounce').value, 10)
+      };
+      try {
+        const response = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const data = await response.json();
+        showToast(data.ok ? 'Runtime parameters updated & saved' : `Error: ${data.error || 'Save failed'}`);
+        if (data.ok) await fetchStatus();
+      } catch (error) { showToast(`Save error: ${error}`); }
+    }
+
+    function drawChart() {
+      const canvas = document.getElementById('power-chart');
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      const W = rect.width, H = rect.height;
+      ctx.clearRect(0, 0, W, H);
+      if (!cachedSamples.length) return;
+      const samples = cachedSamples.slice(-60);
+      const maxW = Math.max(20, (currentConfig.on_max_watts || 120) * 1.1, ...samples.map(s => Math.max(s.a_w || 0, s.b_w || 0)));
+      const padL = 38, padR = 12, padT = 12, padB = 22;
+      const plotW = W - padL - padR, plotH = H - padT - padB;
+      const yOf = watts => padT + plotH - (Math.min(watts, maxW) / maxW) * plotH;
+      const xOf = (index, count) => padL + (count <= 1 ? plotW / 2 : (index / (count - 1)) * plotW);
+      ctx.lineWidth = 1;
+      [0, maxW / 2, maxW].forEach(value => {
+        const y = yOf(value);
+        ctx.strokeStyle = '#263248'; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+        ctx.fillStyle = '#6b7280'; ctx.font = '10px sans-serif'; ctx.fillText(`${value.toFixed(0)}W`, 4, y + 3);
+      });
+      ctx.setLineDash([4, 4]);
+      [currentConfig.on_threshold_watts, currentConfig.on_max_watts].forEach(value => {
+        if (value === undefined) return;
+        const y = yOf(value); ctx.strokeStyle = 'rgba(59,130,246,.6)'; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+      });
+      const yOff = yOf(currentConfig.off_threshold_watts || 0);
+      ctx.strokeStyle = 'rgba(239,68,68,.5)'; ctx.beginPath(); ctx.moveTo(padL, yOff); ctx.lineTo(W - padR, yOff); ctx.stroke(); ctx.setLineDash([]);
+      [["#3b82f6", "a_w"], ["#f59e0b", "b_w"]].forEach(([color, key]) => {
+        ctx.strokeStyle = color; ctx.lineWidth = 2.2; ctx.beginPath();
+        samples.forEach((sample, index) => { const x = xOf(index, samples.length), y = yOf(sample[key] || 0); if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+        ctx.stroke();
+      });
+    }
+
+    fetchStatus();
+    setInterval(fetchStatus, 2000);
+    window.addEventListener('resize', drawChart);
+  </script>
+</body>
+</html>

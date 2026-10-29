@@ -25,6 +25,7 @@ APP_DIR = Path(__file__).parent
 DEFAULT_CONFIG_PATH = APP_DIR / "config.json"
 DB_PATH = APP_DIR / "tvlighton_history.db"
 WEB_UI_PATH = APP_DIR / "web_ui.html"
+DETAIL_UI_PATH = APP_DIR / "detail.html"
 DEFAULT_WEB_PORT = int(os.environ.get("TVLIGHTON_PORT", "8010"))
 DEFAULT_CAMERA_STATE_URL = "http://127.0.0.1:8080/state"
 DEFAULT_CAMERA_SAMPLE_INTERVAL = 5.0
@@ -517,6 +518,18 @@ def make_http_handler(runtime: TvLightOnRuntime):
             path = parsed.path
             if path in ("/", "/index.html"):
                 html_bytes = WEB_UI_PATH.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(html_bytes)))
+                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                self.send_header("Pragma", "no-cache")
+                self.send_header("Expires", "0")
+                self.end_headers()
+                self.wfile.write(html_bytes)
+                return
+
+            if path in ("/detail", "/detail.html"):
+                html_bytes = DETAIL_UI_PATH.read_bytes()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(html_bytes)))

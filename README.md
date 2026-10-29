@@ -4,7 +4,8 @@ Zero-dependency local LAN smart home controller and real-time web console for TP
 
 * **TV Turned ON + room inside the Light-On Range** &rarr; **Tapo A** (`192.168.31.9`) detects current/wattage and **CCX** reads native camera Lux metadata &rarr; **Tapo B** (`192.168.31.136`) turns the bulb on.
 * **Above the Light-On Range or TV OFF** &rarr; **Tapo B turns OFF**. Camera Lux is evaluated continuously, so Tapo B may turn on again as soon as the room returns to the configured range while the TV remains active.
-* **Web Dashboard & Detailed Operation History**: Served on port `8010` (`http://ccx.local:8010` / `https://tv.usdollar.win`).
+* **Overview & Detail Dashboard**: The compact live-control Overview is served at `/`; diagnostics, manual controls, telemetry, and runtime parameters are available at `/detail`.
+* **Detailed Operation History**: Served on port `8010` (`http://ccx.local:8010` / `https://tv.usdollar.win`).
 
 ---
 
@@ -34,6 +35,7 @@ The `tvlighton.service` daemon runs both the `1.5s` KLAP v2 monitoring loop and 
 
 ### REST Endpoints
 * `GET /` — Interactive Web UI (`web_ui.html`)
+* `GET /detail` — Diagnostics, energy/RSSI, manual controls, power chart, poll interval, and debounce settings (`detail.html`)
 * `GET /api/status` — Live status of Tapo A, Tapo B, camera Lux, thresholds, debounce streaks, and chart telemetry
 * `GET /api/history?limit=200&device=TAPO_B&event_type=AUTO_TRIGGER_ON` — Detailed operation history from SQLite
 * `POST /api/control` — Manual switch (`{"target": "tapo_b", "state": true}`)
