@@ -13,10 +13,11 @@ import time
 import urllib.parse
 import urllib.request
 from collections import deque
+from contextlib import contextmanager
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any, Deque, Dict, Iterator, List, Optional
 
 from tapo_klap import TapoAuthError, TapoKlapClient, discover_tapo_devices
 
@@ -116,10 +117,14 @@ class HistoryStore:
         self._lock = threading.Lock()
         self._init_db()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(str(self.db_path), timeout=10.0)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            yield conn
+        finally:
+            conn.close()
 
     def _init_db(self) -> None:
         with self._lock, self._connect() as conn:
@@ -152,6 +157,21 @@ class HistoryStore:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_ops_dev ON operations_log(device, event_type)"
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS tv_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    started_at TEXT NOT NULL,
+                    started_epoch REAL NOT NULL,
+                    ended_at TEXT,
+                    ended_epoch REAL,
+                    duration_seconds INTEGER
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tv_sessions_start ON tv_sessions(started_epoch DESC)"
             )
 
             # Seed initial historical operations from earlier today if table is empty
@@ -225,7 +245,99 @@ class HistoryStore:
                     """,
                     seed_rows,
                 )
+
+            session_count = conn.execute("SELECT COUNT(*) AS cnt FROM tv_sessions").fetchone()["cnt"]
+            if session_count == 0:
+                transitions = conn.execute(
+                    """
+                    SELECT ts_epoch, timestamp, action
+                    FROM operations_log
+                    WHERE device = 'TAPO_A'
+                      AND event_type = 'STATE_CHANGE'
+                      AND (action LIKE '%TV Active%' OR action LIKE '%TV Standby/Off%')
+                    ORDER BY ts_epoch ASC
+                    """
+                ).fetchall()
+                open_start: Optional[sqlite3.Row] = None
+                for transition in transitions:
+                    if "TV Active" in transition["action"]:
+                        if open_start is None:
+                            open_start = transition
+                    elif open_start is not None:
+                        duration = max(0, int(float(transition["ts_epoch"]) - float(open_start["ts_epoch"])))
+                        conn.execute(
+                            """
+                            INSERT INTO tv_sessions (
+                                started_at, started_epoch, ended_at, ended_epoch, duration_seconds
+                            ) VALUES (?, ?, ?, ?, ?)
+                            """,
+                            (
+                                open_start["timestamp"],
+                                float(open_start["ts_epoch"]),
+                                transition["timestamp"],
+                                float(transition["ts_epoch"]),
+                                duration,
+                            ),
+                        )
+                        open_start = None
+                if open_start is not None:
+                    conn.execute(
+                        "INSERT INTO tv_sessions (started_at, started_epoch) VALUES (?, ?)",
+                        (open_start["timestamp"], float(open_start["ts_epoch"])),
+                    )
             conn.commit()
+
+    def start_tv_session(self, started_epoch: Optional[float] = None) -> int:
+        """Open a TV-on session, reusing an already-open session after a restart."""
+        epoch = time.time() if started_epoch is None else float(started_epoch)
+        timestamp = datetime.fromtimestamp(epoch).strftime("%Y-%m-%d %H:%M:%S")
+        with self._lock, self._connect() as conn:
+            existing = conn.execute(
+                "SELECT id FROM tv_sessions WHERE ended_epoch IS NULL ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            if existing:
+                return int(existing["id"])
+            cursor = conn.execute(
+                "INSERT INTO tv_sessions (started_at, started_epoch) VALUES (?, ?)",
+                (timestamp, epoch),
+            )
+            conn.commit()
+            return int(cursor.lastrowid)
+
+    def end_tv_session(self, ended_epoch: Optional[float] = None) -> Optional[int]:
+        """Close the current TV-on session and persist its duration."""
+        epoch = time.time() if ended_epoch is None else float(ended_epoch)
+        timestamp = datetime.fromtimestamp(epoch).strftime("%Y-%m-%d %H:%M:%S")
+        with self._lock, self._connect() as conn:
+            session = conn.execute(
+                "SELECT id, started_epoch FROM tv_sessions WHERE ended_epoch IS NULL ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            if not session:
+                return None
+            duration = max(0, int(epoch - float(session["started_epoch"])))
+            conn.execute(
+                "UPDATE tv_sessions SET ended_at = ?, ended_epoch = ?, duration_seconds = ? WHERE id = ?",
+                (timestamp, epoch, duration, int(session["id"])),
+            )
+            conn.commit()
+            return int(session["id"])
+
+    def query_tv_sessions(self, limit: int = 100, now_epoch: Optional[float] = None) -> List[Dict[str, Any]]:
+        """Return recent TV-on sessions, calculating live duration for an open session."""
+        now = time.time() if now_epoch is None else float(now_epoch)
+        with self._lock, self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM tv_sessions ORDER BY started_epoch DESC LIMIT ?",
+                (max(1, min(int(limit), 1000)),),
+            ).fetchall()
+        sessions: List[Dict[str, Any]] = []
+        for row in rows:
+            item = dict(row)
+            item["active"] = item["ended_epoch"] is None
+            if item["active"]:
+                item["duration_seconds"] = max(0, int(now - float(item["started_epoch"])))
+            sessions.append(item)
+        return sessions
 
     def record_operation(
         self,
@@ -553,6 +665,12 @@ def make_http_handler(runtime: TvLightOnRuntime):
                 self._send_json({"items": items})
                 return
 
+            if path == "/api/tv-sessions":
+                qs = urllib.parse.parse_qs(parsed.query)
+                limit = int(qs.get("limit", ["100"])[0])
+                self._send_json({"items": runtime.history.query_tv_sessions(limit=limit)})
+                return
+
             self._send_json({"error": "Not found"}, status=404)
 
         def do_POST(self) -> None:
@@ -793,6 +911,7 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
 
                 if runtime.high_streak == debounce_n and prev_a_active is not True:
                     prev_a_active = True
+                    runtime.history.start_tv_session()
                     runtime.history.record_operation(
                         "TAPO_A",
                         "STATE_CHANGE",
@@ -804,6 +923,7 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                         runtime.state_a["latency_ms"],
                     )
                 elif runtime.low_streak == debounce_n and prev_a_active is not False:
+                    runtime.history.end_tv_session()
                     if prev_a_active is True:
                         runtime.history.record_operation(
                             "TAPO_A",

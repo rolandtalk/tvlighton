@@ -1,5 +1,6 @@
 import importlib.util
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -42,6 +43,23 @@ class AutomationDecisionTest(unittest.TestCase):
         self.assertEqual(classify(4, 40, 120, 5), "off")
         self.assertEqual(classify(121, 40, 120, 5), "off")
         self.assertEqual(classify(20, 40, 120, 5), "transition")
+
+    def test_tv_sessions_record_start_end_and_duration(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            store = tvlighton.HistoryStore(Path(tmp_dir) / "sessions.db")
+            session_id = store.start_tv_session(started_epoch=1000)
+            self.assertEqual(store.start_tv_session(started_epoch=1010), session_id)
+
+            active = store.query_tv_sessions(now_epoch=1065)
+            self.assertEqual(len(active), 1)
+            self.assertTrue(active[0]["active"])
+            self.assertEqual(active[0]["duration_seconds"], 65)
+
+            self.assertEqual(store.end_tv_session(ended_epoch=1125), session_id)
+            completed = store.query_tv_sessions(now_epoch=1200)[0]
+            self.assertFalse(completed["active"])
+            self.assertEqual(completed["duration_seconds"], 125)
+            self.assertIsNone(store.end_tv_session(ended_epoch=1300))
 
 
 if __name__ == "__main__":

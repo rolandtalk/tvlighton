@@ -649,31 +649,12 @@
       </div>
     </div>
 
-    <!-- Detailed Operation History Table -->
+    <!-- TV On Session History -->
     <div class="card">
       <div class="controls-bar">
         <div>
-          <div class="card-title">Tapo A &amp; Tapo B Detailed Operation History</div>
-          <div class="card-subtitle">Complete audit log of every automatic trigger, power transition, manual switch, and device state snapshot</div>
-        </div>
-        <div class="filters">
-          <select id="filter-device" onchange="loadHistory()">
-            <option value="">All Devices (Tapo A, Tapo B, System)</option>
-            <option value="TAPO_A">Tapo A (TV Sensor)</option>
-            <option value="TAPO_B">Tapo B (Bulb Switch)</option>
-            <option value="SYSTEM">System / Config</option>
-          </select>
-          <select id="filter-type" onchange="loadHistory()">
-            <option value="">All Event Types</option>
-            <option value="AUTO_TRIGGER_ON">Auto Trigger ON</option>
-            <option value="AUTO_TRIGGER_OFF">Auto Trigger OFF</option>
-            <option value="STATE_CHANGE">Device State / Power Change</option>
-            <option value="MANUAL_CONTROL">Manual Control</option>
-            <option value="SERVICE_START">Service Start / Config</option>
-            <option value="ERROR">Errors / Warnings</option>
-          </select>
-          <input type="text" id="filter-search" placeholder="Search action or reason..." oninput="renderHistoryTable()" />
-          <button onclick="exportHistoryCsv()">Export CSV</button>
+          <div class="card-title">TV On History</div>
+          <div class="card-subtitle">Each TV viewing session with its start time, end time, and total duration</div>
         </div>
       </div>
 
@@ -681,19 +662,13 @@
         <table>
           <thead>
             <tr>
-              <th>#</th>
-              <th>Timestamp</th>
-              <th>Device</th>
-              <th>Event Type</th>
-              <th>Operation / Action</th>
-              <th>Detailed Trigger Reason</th>
-              <th>Tapo A Snapshot (TV)</th>
-              <th>Tapo B Snapshot (Bulb)</th>
-              <th>Latency</th>
+              <th>TV On</th>
+              <th>TV Off</th>
+              <th>Duration</th>
             </tr>
           </thead>
-          <tbody id="history-tbody">
-            <tr><td colspan="9" style="text-align:center;color:var(--muted);">Loading operation history...</td></tr>
+          <tbody id="tv-sessions-body">
+            <tr><td colspan="3" style="text-align:center;color:var(--muted);">Loading TV sessions...</td></tr>
           </tbody>
         </table>
       </div>
@@ -703,7 +678,6 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    let cachedHistory = [];
     let cachedSamples = [];
     let currentConfig = { on_threshold_watts: 40.0, on_max_watts: 120.0, off_threshold_watts: 5.0 };
     let configInitialized = false;
@@ -745,21 +719,6 @@
       el.textContent = msg;
       el.style.display = 'block';
       setTimeout(() => { el.style.display = 'none'; }, 3200);
-    }
-
-    function deviceBadge(dev) {
-      if (dev === 'TAPO_A') return '<span class="badge badge-a">TAPO A</span>';
-      if (dev === 'TAPO_B') return '<span class="badge badge-b">TAPO B</span>';
-      return '<span class="badge badge-sys">SYSTEM</span>';
-    }
-
-    function eventBadge(ev) {
-      if (ev === 'AUTO_TRIGGER_ON') return '<span class="badge badge-on">AUTO ON</span>';
-      if (ev === 'AUTO_TRIGGER_OFF') return '<span class="badge badge-off">AUTO OFF</span>';
-      if (ev === 'MANUAL_CONTROL') return '<span class="badge badge-b">MANUAL</span>';
-      if (ev === 'STATE_CHANGE') return '<span class="badge badge-a">STATE CHANGE</span>';
-      if (ev === 'ERROR') return '<span class="badge badge-err">ERROR</span>';
-      return `<span class="badge badge-sys">${ev}</span>`;
     }
 
     function syncRangeLabels() {
@@ -845,65 +804,37 @@
       }
     }
 
-    async function loadHistory() {
-      try {
-        const dev = document.getElementById('filter-device').value;
-        const ev = document.getElementById('filter-type').value;
-        const params = new URLSearchParams({ limit: '200' });
-        if (dev) params.set('device', dev);
-        if (ev) params.set('event_type', ev);
-        const res = await fetch('/api/history?' + params.toString());
-        const data = await res.json();
-        cachedHistory = data.items || [];
-        renderHistoryTable();
-      } catch (err) {
-        console.error('History fetch error:', err);
-      }
+    function formatDuration(totalSeconds) {
+      const seconds = Math.max(0, Number(totalSeconds) || 0);
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const remainingSeconds = Math.floor(seconds % 60);
+      if (hours) return `${hours}h ${minutes}m ${remainingSeconds}s`;
+      if (minutes) return `${minutes}m ${remainingSeconds}s`;
+      return `${remainingSeconds}s`;
     }
 
-    function renderHistoryTable() {
-      const q = (document.getElementById('filter-search').value || '').toLowerCase().trim();
-      const tbody = document.getElementById('history-tbody');
-      const rows = cachedHistory.filter(item => {
-        if (!q) return true;
-        return (
-          (item.action || '').toLowerCase().includes(q) ||
-          (item.trigger_reason || '').toLowerCase().includes(q) ||
-          (item.event_type || '').toLowerCase().includes(q) ||
-          (item.timestamp || '').toLowerCase().includes(q)
-        );
-      });
-
-      if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);">No matching operations found.</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = rows.map(r => {
-        const aState = r.tapo_a_relay ? '<b style="color:var(--green)">ON</b>' : '<b style="color:var(--muted)">OFF</b>';
-        const bState = r.tapo_b_relay ? '<b style="color:var(--amber)">ON</b>' : '<b style="color:var(--muted)">OFF</b>';
-        return `
+    async function loadTvSessions() {
+      const tbody = document.getElementById('tv-sessions-body');
+      try {
+        const response = await fetch('/api/tv-sessions?limit=100');
+        const data = await response.json();
+        const sessions = data.items || [];
+        if (!sessions.length) {
+          tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--muted);">No TV sessions recorded yet.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = sessions.map(session => `
           <tr>
-            <td class="mono">#${r.id}</td>
-            <td class="mono" style="white-space:nowrap;">${r.timestamp}</td>
-            <td>${deviceBadge(r.device)}</td>
-            <td>${eventBadge(r.event_type)}</td>
-            <td style="font-weight:600;">${r.action}</td>
-            <td style="color:#d1d5db;max-width:340px;">${r.trigger_reason || ''}</td>
-            <td class="snapshot-cell mono">
-              <span>Relay: ${aState}</span>
-              <span><b>${Number(r.tapo_a_watts || 0).toFixed(2)}W</b> (${r.tapo_a_mw || 0}mW)</span><br/>
-              <span style="color:var(--muted)">Today: ${r.tapo_a_today_wh ?? 0}Wh | RSSI: ${r.tapo_a_rssi ?? '--'}dBm</span>
-            </td>
-            <td class="snapshot-cell mono">
-              <span>Relay: ${bState}</span>
-              <span><b>${Number(r.tapo_b_watts || 0).toFixed(2)}W</b> (${r.tapo_b_mw || 0}mW)</span><br/>
-              <span style="color:var(--muted)">Today: ${r.tapo_b_today_wh ?? 0}Wh | RSSI: ${r.tapo_b_rssi ?? '--'}dBm</span>
-            </td>
-            <td class="mono">${r.latency_ms ? r.latency_ms + ' ms' : '--'}</td>
+            <td class="mono" style="white-space:nowrap;">${session.started_at}</td>
+            <td class="mono" style="white-space:nowrap;">${session.active ? '<span style="color:var(--green);font-weight:700;">TV ON NOW</span>' : session.ended_at}</td>
+            <td style="font-weight:700;white-space:nowrap;">${formatDuration(session.duration_seconds)}</td>
           </tr>
-        `;
-      }).join('');
+        `).join('');
+      } catch (error) {
+        console.error('TV session fetch error:', error);
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--red);">Unable to load TV sessions.</td></tr>';
+      }
     }
 
     async function controlDevice(target, turnOn) {
@@ -917,7 +848,6 @@
         if (data.ok) {
           showToast(data.message || 'Command executed');
           await fetchStatus();
-          await loadHistory();
         } else {
           showToast('Error: ' + (data.error || 'Unknown error'));
         }
@@ -943,7 +873,6 @@
         if (data.ok) {
           showToast('Thresholds updated & saved');
           await fetchStatus();
-          await loadHistory();
         } else {
           showToast('Error: ' + (data.error || 'Failed to update config'));
         }
@@ -1029,33 +958,14 @@
       ctx.stroke();
     }
 
-    function exportHistoryCsv() {
-      if (!cachedHistory.length) return;
-      const headers = [
-        'id','timestamp','device','event_type','action','trigger_reason',
-        'tapo_a_relay','tapo_a_watts','tapo_a_mw','tapo_a_today_wh','tapo_a_rssi',
-        'tapo_b_relay','tapo_b_watts','tapo_b_mw','tapo_b_today_wh','tapo_b_rssi','latency_ms'
-      ];
-      const csv = [
-        headers.join(','),
-        ...cachedHistory.map(r => headers.map(h => JSON.stringify(r[h] ?? '')).join(','))
-      ].join('\n');
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'tvlighton_operation_history.csv';
-      a.click();
-    }
-
     function initialLoad() {
       fetchStatus();
-      loadHistory();
+      loadTvSessions();
     }
 
     initialLoad();
     setInterval(fetchStatus, 2000);
-    setInterval(loadHistory, 4000);
+    setInterval(loadTvSessions, 5000);
     window.addEventListener('resize', drawChart);
   </script>
 </body>
