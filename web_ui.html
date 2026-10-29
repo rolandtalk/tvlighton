@@ -453,29 +453,15 @@
       </div>
       <div class="header-meta">
         <span class="pill"><span class="dot" id="live-dot"></span> <span id="poll-status">Live Polling (1.5s)</span></span>
-        <span class="pill mono" id="last-updated">Updated: --:--:--</span>
-        <button onclick="refreshNow()">Refresh Now</button>
       </div>
     </header>
 
     <!-- Summary Strip -->
     <div class="summary-strip">
-      <div class="summary-item">
-        <div class="label">Total Logged Operations</div>
-        <div class="value" id="stat-total-ops">0</div>
-      </div>
-      <div class="summary-item">
-        <div class="label">Auto TV &rarr; Bulb Triggers</div>
-        <div class="value" id="stat-auto-triggers">0</div>
-      </div>
       <div class="summary-item camera-light" title="Estimated ambient lux from the CCX camera auto-exposure metadata.">
         <div class="label">CCX Camera Light</div>
         <div class="value" id="camera-light-value">-- lux</div>
         <div class="detail" id="camera-light-detail">Waiting for camera sample</div>
-      </div>
-      <div class="summary-item">
-        <div class="label">Manual Operations</div>
-        <div class="value" id="stat-manual-ops">0</div>
       </div>
       <div class="summary-item">
         <div class="label">Active Rule Thresholds</div>
@@ -719,7 +705,6 @@
         const data = await res.json();
 
         document.getElementById('host-label').textContent = data.hostname || 'CCX';
-        document.getElementById('last-updated').textContent = 'Updated: ' + (data.timestamp || '--');
 
         const a = data.tapo_a || {};
         const b = data.tapo_b || {};
@@ -785,12 +770,6 @@
         document.getElementById('b-runtime').textContent = (b.today_runtime ?? '--') + ' mins today';
         document.getElementById('b-rssi').textContent = (b.rssi ?? '--') + ' dBm';
         document.getElementById('b-latency').textContent = `KLAP: ${b.latency_ms ?? '--'} ms`;
-
-        if (data.stats) {
-          document.getElementById('stat-total-ops').textContent = data.stats.total_ops || 0;
-          document.getElementById('stat-auto-triggers').textContent = data.stats.auto_triggers || 0;
-          document.getElementById('stat-manual-ops').textContent = data.stats.manual_ops || 0;
-        }
 
         if (data.recent_samples) {
           cachedSamples = data.recent_samples;
@@ -1005,12 +984,12 @@
       a.click();
     }
 
-    function refreshNow() {
+    function initialLoad() {
       fetchStatus();
       loadHistory();
     }
 
-    refreshNow();
+    initialLoad();
     setInterval(fetchStatus, 2000);
     setInterval(loadHistory, 4000);
     window.addEventListener('resize', drawChart);
