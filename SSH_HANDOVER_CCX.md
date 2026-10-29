@@ -133,7 +133,7 @@ If the plugs or Raspberry Pi are moved to a new Wi-Fi subnet or a new Tapo accou
    * `automation.subnet_prefix`: First three octets of the LAN subnet (e.g. `"192.168.31"`). Even if DHCP assigns new IPs to Tapo A or Tapo B, the controller automatically finds their new IPs using their MAC addresses (`EC-B9-31-25-07-E7` and `EC-B9-31-24-FD-FF`).
    * `automation.on_threshold_watts`: Wattage on Tapo A that triggers Tapo B **ON** (currently `10.0` W).
    * `automation.off_threshold_watts`: Wattage on Tapo A that triggers Tapo B **OFF** (currently `5.0` W).
-   * `automation.lux_threshold`: Upper end of the camera **Light-On Range** (currently `50.0` lux). Above this value, Tapo B turns off and locks out until the next TV cycle.
+   * `automation.lux_threshold`: Upper end of the camera **Light-On Range**. Camera Lux is evaluated continuously: above this value Tapo B turns off, and when Lux returns to the range Tapo B may turn on again while the TV remains active.
 3. Restart the service to apply changes:
    ```bash
    ssh ccx "systemctl --user restart tvlighton.service"

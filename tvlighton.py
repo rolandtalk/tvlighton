@@ -77,14 +77,12 @@ def decide_automatic_bulb_action(
     low_streak: int,
     dark_streak: int,
     bright_streak: int,
-    lux_lockout: bool,
     debounce_readings: int,
     auto_off: bool,
 ) -> Optional[bool]:
     """Return True for ON, False for OFF, or None when no relay change is due."""
     if (
         not bulb_is_on
-        and not lux_lockout
         and high_streak >= debounce_readings
         and dark_streak >= debounce_readings
     ):
@@ -344,7 +342,6 @@ class TvLightOnRuntime:
         self.low_streak = 0
         self.dark_streak = 0
         self.bright_streak = 0
-        self.lux_lockout = False
         self.last_updated = "--"
         self.recent_samples: Deque[Dict[str, Any]] = deque(maxlen=120)
         camera_cfg = self.cfg.get("camera_light", {})
@@ -438,8 +435,6 @@ class TvLightOnRuntime:
                 auto["poll_interval_seconds"] = max(0.5, float(payload["poll_interval_seconds"]))
             if "debounce_readings" in payload:
                 auto["debounce_readings"] = max(1, int(payload["debounce_readings"]))
-            self.lux_lockout = False
-
             with open(self.cfg_path, "w", encoding="utf-8") as f:
                 json.dump(self.cfg, f, indent=2)
             os.chmod(self.cfg_path, 0o600)
@@ -470,7 +465,6 @@ class TvLightOnRuntime:
             "low_streak": self.low_streak,
             "dark_streak": self.dark_streak,
             "bright_streak": self.bright_streak,
-            "lux_lockout": self.lux_lockout,
             "automation": self.cfg.get("automation", {}),
             "stats": self.history.get_summary_stats(),
             "recent_samples": list(self.recent_samples),
@@ -764,15 +758,6 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                     runtime.bright_streak += 1
                     runtime.dark_streak = 0
 
-                if runtime.low_streak >= debounce_n:
-                    runtime.lux_lockout = False
-                elif (
-                    not bulb_is_on
-                    and runtime.high_streak >= debounce_n
-                    and runtime.bright_streak >= debounce_n
-                ):
-                    runtime.lux_lockout = True
-
                 if runtime.high_streak == debounce_n and prev_a_active is not True:
                     prev_a_active = True
                     runtime.history.record_operation(
@@ -804,7 +789,6 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                     runtime.low_streak,
                     runtime.dark_streak,
                     runtime.bright_streak,
-                    runtime.lux_lockout,
                     debounce_n,
                     auto_off,
                 )
@@ -840,7 +824,6 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                             f"light above range ({light_lux:.1f} lux > {lux_threshold:.1f}) "
                             f"for {debounce_n} readings"
                         )
-                        runtime.lux_lockout = True
                     _log(f"{off_reason} -> Turning Tapo B (Bulb) OFF")
                     t0 = time.perf_counter()
                     runtime.client_b.set_device_on(False)

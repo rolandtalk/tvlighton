@@ -12,9 +12,9 @@ spec.loader.exec_module(tvlighton)
 
 
 class AutomationDecisionTest(unittest.TestCase):
-    def decide(self, bulb_is_on, high=0, low=0, dark=0, bright=0, lockout=False, debounce=2, auto_off=True):
+    def decide(self, bulb_is_on, high=0, low=0, dark=0, bright=0, debounce=2, auto_off=True):
         return tvlighton.decide_automatic_bulb_action(
-            bulb_is_on, high, low, dark, bright, lockout, debounce, auto_off
+            bulb_is_on, high, low, dark, bright, debounce, auto_off
         )
 
     def test_turns_on_only_when_tv_active_and_dark(self):
@@ -26,8 +26,9 @@ class AutomationDecisionTest(unittest.TestCase):
         self.assertIs(self.decide(True, low=2, dark=2), False)
         self.assertIs(self.decide(True, high=2, bright=2), False)
 
-    def test_lux_lockout_prevents_bulb_feedback_cycle(self):
-        self.assertIsNone(self.decide(False, high=2, dark=2, lockout=True))
+    def test_lux_continuously_reenables_bulb_when_room_is_dark_again(self):
+        self.assertIs(self.decide(True, high=2, bright=2), False)
+        self.assertIs(self.decide(False, high=2, dark=2), True)
 
     def test_holds_state_until_debounce_is_met(self):
         self.assertIsNone(self.decide(True, high=2, bright=1))

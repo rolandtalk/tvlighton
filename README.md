@@ -3,7 +3,7 @@
 Zero-dependency local LAN smart home controller and real-time web console for TP-Link **Tapo P110M** smart plugs using the **KLAP v2** protocol, with an IMX290 camera Lux gate.
 
 * **TV Turned ON + room inside the Light-On Range** &rarr; **Tapo A** (`192.168.31.9`) detects current/wattage and **CCX** reads native camera Lux metadata &rarr; **Tapo B** (`192.168.31.136`) turns the bulb on.
-* **Above the Light-On Range or TV OFF** &rarr; **Tapo B turns OFF**. A Lux lockout prevents the bulb's own light from causing an ON/OFF feedback loop until the next TV cycle.
+* **Above the Light-On Range or TV OFF** &rarr; **Tapo B turns OFF**. Camera Lux is evaluated continuously, so Tapo B may turn on again as soon as the room returns to the configured range while the TV remains active.
 * **Web Dashboard & Detailed Operation History**: Served on port `8010` (`http://ccx.local:8010` / `https://tv.usdollar.win`).
 
 ---
@@ -34,7 +34,7 @@ The `tvlighton.service` daemon runs both the `1.5s` KLAP v2 monitoring loop and 
 
 ### REST Endpoints
 * `GET /` — Interactive Web UI (`web_ui.html`)
-* `GET /api/status` — Live status of Tapo A, Tapo B, camera Lux, thresholds, streaks, lockout, and chart telemetry
+* `GET /api/status` — Live status of Tapo A, Tapo B, camera Lux, thresholds, debounce streaks, and chart telemetry
 * `GET /api/history?limit=200&device=TAPO_B&event_type=AUTO_TRIGGER_ON` — Detailed operation history from SQLite
 * `POST /api/control` — Manual switch (`{"target": "tapo_b", "state": true}`)
 * `POST /api/config` — Live threshold update (`{"on_threshold_watts": 10.0, "off_threshold_watts": 5.0, "lux_threshold": 50.0, "poll_interval_seconds": 1.5, "debounce_readings": 2}`)
