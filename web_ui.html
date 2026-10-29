@@ -300,7 +300,7 @@
       font-family: inherit;
     }
     .table-container {
-      overflow-x: auto;
+      overflow: visible;
       border: 1px solid var(--border);
       border-radius: 10px;
     }
@@ -329,6 +329,11 @@
     }
     tr:last-child td { border-bottom: none; }
     tr:hover td { background: rgba(255, 255, 255, 0.02); }
+    .tv-history-table { table-layout: fixed; }
+    .tv-history-table th:nth-child(1) { width: 48%; }
+    .tv-history-table th:nth-child(2) { width: 24%; }
+    .tv-history-table th:nth-child(3) { width: 28%; }
+    .tv-history-table td { white-space: nowrap; }
     .mono {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       font-size: 12px;
@@ -533,6 +538,10 @@
     }
     @media (max-width: 768px) {
       .metrics-row { grid-template-columns: repeat(2, 1fr); }
+      .tv-history-card { padding: 14px; }
+      .tv-history-table { font-size: 11px; }
+      .tv-history-table th, .tv-history-table td { padding: 9px 8px; }
+      .tv-history-table .mono { font-size: 11px; }
     }
   </style>
 </head>
@@ -650,7 +659,7 @@
     </div>
 
     <!-- TV On Session History -->
-    <div class="card">
+    <div class="card tv-history-card">
       <div class="controls-bar">
         <div>
           <div class="card-title">TV On History</div>
@@ -659,7 +668,7 @@
       </div>
 
       <div class="table-container">
-        <table>
+        <table class="tv-history-table">
           <thead>
             <tr>
               <th>TV On</th>
@@ -806,18 +815,28 @@
 
     function formatDuration(totalSeconds) {
       const seconds = Math.max(0, Number(totalSeconds) || 0);
-      const hours = Math.floor(seconds / 3600);
-      const minutes = Math.floor((seconds % 3600) / 60);
-      const remainingSeconds = Math.floor(seconds % 60);
-      if (hours) return `${hours}h ${minutes}m ${remainingSeconds}s`;
-      if (minutes) return `${minutes}m ${remainingSeconds}s`;
-      return `${remainingSeconds}s`;
+      const totalMinutes = Math.floor(seconds / 60);
+      if (totalMinutes < 1) return '<1 min';
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      if (hours && minutes) return `${hours}h ${minutes}m`;
+      if (hours) return `${hours}h`;
+      return `${minutes} min`;
+    }
+
+    function formatTvOn(timestamp) {
+      return String(timestamp || '--').slice(0, 16);
+    }
+
+    function formatTvOff(timestamp) {
+      const time = String(timestamp || '').split(' ')[1];
+      return time ? time.slice(0, 5) : '--';
     }
 
     async function loadTvSessions() {
       const tbody = document.getElementById('tv-sessions-body');
       try {
-        const response = await fetch('/api/tv-sessions?limit=100');
+        const response = await fetch('/api/tv-sessions?limit=1000');
         const data = await response.json();
         const sessions = data.items || [];
         if (!sessions.length) {
@@ -826,9 +845,9 @@
         }
         tbody.innerHTML = sessions.map(session => `
           <tr>
-            <td class="mono" style="white-space:nowrap;">${session.started_at}</td>
-            <td class="mono" style="white-space:nowrap;">${session.active ? '<span style="color:var(--green);font-weight:700;">TV ON NOW</span>' : session.ended_at}</td>
-            <td style="font-weight:700;white-space:nowrap;">${formatDuration(session.duration_seconds)}</td>
+            <td class="mono">${formatTvOn(session.started_at)}</td>
+            <td class="mono">${session.active ? '<span style="color:var(--green);font-weight:700;">ON NOW</span>' : formatTvOff(session.ended_at)}</td>
+            <td style="font-weight:700;">${formatDuration(session.duration_seconds)}</td>
           </tr>
         `).join('');
       } catch (error) {
