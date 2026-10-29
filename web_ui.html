@@ -415,6 +415,14 @@
       transform: translateY(-50%);
       pointer-events: none;
     }
+    .lux-scale {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+    }
     .range-value {
       float: right;
       color: var(--text);
@@ -586,8 +594,9 @@
           <div class="field lux-slider">
             <label>Light-On Range <span class="range-value" id="cfg-lux-value">60 lux</span></label>
             <div class="lux-range-shell">
-              <input type="range" min="0" max="500" step="5" id="cfg-lux" value="60" oninput="syncRangeLabels()" />
+              <input type="range" min="0" max="4" step="1" id="cfg-lux" value="3" oninput="syncRangeLabels()" aria-label="Maximum Light-On Lux" />
             </div>
+            <div class="lux-scale" aria-hidden="true"><span>0</span><span>15</span><span>30</span><span>60</span><span>120</span></div>
           </div>
           <div class="field">
             <label>Poll Interval (Seconds)</label>
@@ -662,6 +671,15 @@
     let cachedSamples = [];
     let currentConfig = { on_threshold_watts: 10.0, off_threshold_watts: 5.0 };
     let configInitialized = false;
+    const luxScale = [0, 15, 30, 60, 120];
+
+    function nearestLuxIndex(value) {
+      return luxScale.reduce(
+        (best, candidate, index) =>
+          Math.abs(candidate - value) < Math.abs(luxScale[best] - value) ? index : best,
+        0
+      );
+    }
 
     function showToast(msg) {
       const el = document.getElementById('toast');
@@ -691,10 +709,10 @@
       document.getElementById('cfg-off-watts-value').textContent =
         `${Number(document.getElementById('cfg-off-watts').value).toFixed(1)} W`;
       const luxInput = document.getElementById('cfg-lux');
-      const luxValue = Number(luxInput.value);
+      const luxValue = luxScale[Number(luxInput.value)];
       const luxMin = Number(luxInput.min);
       const luxMax = Number(luxInput.max);
-      const progress = ((luxValue - luxMin) / (luxMax - luxMin)) * 100;
+      const progress = ((Number(luxInput.value) - luxMin) / (luxMax - luxMin)) * 100;
       document.getElementById('cfg-lux-value').textContent = `${luxValue.toFixed(0)} lux`;
       luxInput.style.setProperty('--range-progress', `${progress}%`);
     }
@@ -715,7 +733,7 @@
         if (!configInitialized && cfg.on_threshold_watts !== undefined) {
           document.getElementById('cfg-on-watts').value = cfg.on_threshold_watts;
           document.getElementById('cfg-off-watts').value = cfg.off_threshold_watts;
-          document.getElementById('cfg-lux').value = cfg.lux_threshold ?? 60;
+          document.getElementById('cfg-lux').value = nearestLuxIndex(cfg.lux_threshold ?? 60);
           document.getElementById('cfg-poll-sec').value = cfg.poll_interval_seconds;
           document.getElementById('cfg-debounce').value = cfg.debounce_readings;
           syncRangeLabels();
@@ -866,7 +884,7 @@
         const payload = {
           on_threshold_watts: parseFloat(document.getElementById('cfg-on-watts').value),
           off_threshold_watts: parseFloat(document.getElementById('cfg-off-watts').value),
-          lux_threshold: parseFloat(document.getElementById('cfg-lux').value),
+          lux_threshold: luxScale[Number(document.getElementById('cfg-lux').value)],
           poll_interval_seconds: parseFloat(document.getElementById('cfg-poll-sec').value),
           debounce_readings: parseInt(document.getElementById('cfg-debounce').value, 10)
         };

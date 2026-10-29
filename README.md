@@ -26,7 +26,7 @@ The `tvlighton.service` daemon runs both the `1.5s` KLAP v2 monitoring loop and 
 * **Live Tapo A & Tapo B Telemetry Cards**: Real-time wattage (`W` & `mW`), relay status (`ON`/`OFF`), today's energy (`Wh`) and runtime (`mins`), Wi-Fi RSSI (`dBm`), and KLAP v2 round-trip latency (`ms`).
 * **Real-Time Power Telemetry Chart**: Live canvas plot of Tapo A (TV Watts) and Tapo B (Bulb Watts) against configurable ON/OFF thresholds.
 * **CCX Camera Light**: Native IMX290 Lux, exposure, and gain telemetry. The orange **Light-On Range** slider controls the maximum Lux at which the bulb may be lit.
-* **Slider Controls**: TV ON power, TV OFF power, and Light-On Range thresholds are adjustable from the dashboard and saved to `config.json`.
+* **Slider Controls**: TV ON power and TV OFF power are adjustable continuously; the Light-On Range uses the discrete nonlinear scale `0 / 15 / 30 / 60 / 120 lux`. Selections are saved to `config.json`.
 * **Detailed Tapo A / Tapo B Operation History (`tvlighton_history.db`)**:
   * Logs every automatic trigger (`AUTO_TRIGGER_ON`, `AUTO_TRIGGER_OFF`), device power/relay state transition (`STATE_CHANGE`), manual switch (`MANUAL_CONTROL`), service/config update (`SERVICE_START`), and error (`ERROR`).
   * Records full device state snapshots (`Relay`, `W`, `mW`, `Today Wh`, `RSSI`, `KLAP Latency`) for both **Tapo A** and **Tapo B** on every operation.
