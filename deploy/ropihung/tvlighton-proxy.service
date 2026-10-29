@@ -1,0 +1,6 @@
+[Unit]
+Description=Proxy tvlighton web traffic from ropihung to CCX
+After=network-online.target
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd 192.168.31.204:8010

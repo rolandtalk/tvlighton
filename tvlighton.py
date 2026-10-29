@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tvlighton — Smart Home Controller & Web UI (Tapo A TV Sensor -> ropihung -> Tapo B Bulb Switch)."""
+"""tvlighton — Smart Home Controller & Web UI (Tapo A TV Sensor -> CCX -> Tapo B Bulb Switch)."""
 
 import argparse
 import base64
@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 import urllib.parse
+import urllib.request
 from collections import deque
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,6 +26,8 @@ DEFAULT_CONFIG_PATH = APP_DIR / "config.json"
 DB_PATH = APP_DIR / "tvlighton_history.db"
 WEB_UI_PATH = APP_DIR / "web_ui.html"
 DEFAULT_WEB_PORT = int(os.environ.get("TVLIGHTON_PORT", "8010"))
+DEFAULT_CAMERA_STATE_URL = "http://127.0.0.1:8080/state"
+DEFAULT_CAMERA_SAMPLE_INTERVAL = 5.0
 
 
 def _now_str() -> str:
@@ -42,6 +45,56 @@ def _decode_nickname(raw_nickname: Optional[str], fallback: str) -> str:
         return base64.b64decode(raw_nickname).decode("utf-8")
     except Exception:
         return raw_nickname
+
+
+def read_camera_light(state_url: str, timeout: float = 3.0) -> Dict[str, Any]:
+    """Return the camera pipeline's auto-exposure lux estimate and metadata."""
+    request = urllib.request.Request(state_url, headers={"User-Agent": "tvlighton/1.0"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        payload = json.load(response)
+    light = payload.get("result", {}).get("light", {})
+    if not light.get("online") or light.get("lux") is None:
+        raise RuntimeError("Camera lux metadata is unavailable")
+    value = round(float(light["lux"]), 1)
+
+    return {
+        "online": True,
+        "value": value,
+        "unit": "lux",
+        "sampled_at": _now_str(),
+        "source": "IMX290 CSI",
+        "exposure_time_us": light.get("exposure_time_us"),
+        "analogue_gain": light.get("analogue_gain"),
+        "digital_gain": light.get("digital_gain"),
+        "colour_temperature_k": light.get("colour_temperature_k"),
+        "error": None,
+    }
+
+
+def decide_automatic_bulb_action(
+    bulb_is_on: bool,
+    high_streak: int,
+    low_streak: int,
+    dark_streak: int,
+    bright_streak: int,
+    lux_lockout: bool,
+    debounce_readings: int,
+    auto_off: bool,
+) -> Optional[bool]:
+    """Return True for ON, False for OFF, or None when no relay change is due."""
+    if (
+        not bulb_is_on
+        and not lux_lockout
+        and high_streak >= debounce_readings
+        and dark_streak >= debounce_readings
+    ):
+        return True
+    if bulb_is_on and (
+        (auto_off and low_streak >= debounce_readings)
+        or bright_streak >= debounce_readings
+    ):
+        return False
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +307,7 @@ class TvLightOnRuntime:
     def __init__(self, cfg_path: Path, email: str, password: str):
         self.cfg_path = cfg_path
         self.cfg = load_config(cfg_path)
+        self.cfg.setdefault("automation", {}).setdefault("lux_threshold", 60.0)
         self.email = email
         self.password = password
         self.lock = threading.Lock()
@@ -288,8 +342,40 @@ class TvLightOnRuntime:
         }
         self.high_streak = 0
         self.low_streak = 0
+        self.dark_streak = 0
+        self.bright_streak = 0
+        self.lux_lockout = False
         self.last_updated = "--"
         self.recent_samples: Deque[Dict[str, Any]] = deque(maxlen=120)
+        camera_cfg = self.cfg.get("camera_light", {})
+        self.camera_state_url = str(
+            camera_cfg.get("state_url", DEFAULT_CAMERA_STATE_URL)
+        )
+        self.camera_sample_interval = max(
+            1.0,
+            float(camera_cfg.get("sample_interval_seconds", DEFAULT_CAMERA_SAMPLE_INTERVAL)),
+        )
+        self.camera_light: Dict[str, Any] = {
+            "online": False,
+            "value": None,
+            "unit": "lux",
+            "sampled_at": "--",
+            "source": "IMX290 CSI",
+            "error": "Waiting for first camera sample",
+        }
+
+    def update_camera_light(self) -> None:
+        try:
+            self.camera_light = read_camera_light(self.camera_state_url)
+        except Exception as err:
+            self.camera_light = {
+                "online": False,
+                "value": None,
+                "unit": "lux",
+                "sampled_at": _now_str(),
+                "source": "IMX290 CSI",
+                "error": str(err),
+            }
 
     def poll_unit(self, client: TapoKlapClient, unit_cfg: Dict[str, Any], fallback_name: str) -> Dict[str, Any]:
         t0 = time.perf_counter()
@@ -341,23 +427,31 @@ class TvLightOnRuntime:
             auto = self.cfg.setdefault("automation", {})
             old_on = auto.get("on_threshold_watts", 10.0)
             old_off = auto.get("off_threshold_watts", 5.0)
+            old_lux = auto.get("lux_threshold", 60.0)
             if "on_threshold_watts" in payload:
                 auto["on_threshold_watts"] = float(payload["on_threshold_watts"])
             if "off_threshold_watts" in payload:
                 auto["off_threshold_watts"] = float(payload["off_threshold_watts"])
+            if "lux_threshold" in payload:
+                auto["lux_threshold"] = max(0.0, float(payload["lux_threshold"]))
             if "poll_interval_seconds" in payload:
                 auto["poll_interval_seconds"] = max(0.5, float(payload["poll_interval_seconds"]))
             if "debounce_readings" in payload:
                 auto["debounce_readings"] = max(1, int(payload["debounce_readings"]))
+            self.lux_lockout = False
 
             with open(self.cfg_path, "w", encoding="utf-8") as f:
                 json.dump(self.cfg, f, indent=2)
             os.chmod(self.cfg_path, 0o600)
 
-            action = f"Updated Thresholds (ON >= {auto['on_threshold_watts']}W, OFF <= {auto['off_threshold_watts']}W)"
+            action = (
+                f"Updated Thresholds (ON >= {auto['on_threshold_watts']}W, "
+                f"OFF <= {auto['off_threshold_watts']}W, Light-On 0-{auto['lux_threshold']} lux)"
+            )
             reason = (
-                f"Changed via Web UI from ON>={old_on}W / OFF<={old_off}W to "
+                f"Changed via Web UI from ON>={old_on}W / OFF<={old_off}W / Light-On 0-{old_lux} lux to "
                 f"ON>={auto['on_threshold_watts']}W / OFF<={auto['off_threshold_watts']}W "
+                f"/ Light-On 0-{auto['lux_threshold']} lux "
                 f"(poll={auto['poll_interval_seconds']}s, debounce={auto['debounce_readings']})"
             )
             self.history.record_operation(
@@ -371,8 +465,12 @@ class TvLightOnRuntime:
             "timestamp": self.last_updated,
             "tapo_a": self.state_a,
             "tapo_b": self.state_b,
+            "camera_light": dict(self.camera_light),
             "high_streak": self.high_streak,
             "low_streak": self.low_streak,
+            "dark_streak": self.dark_streak,
+            "bright_streak": self.bright_streak,
+            "lux_lockout": self.lux_lockout,
             "automation": self.cfg.get("automation", {}),
             "stats": self.history.get_summary_stats(),
             "recent_samples": list(self.recent_samples),
@@ -410,6 +508,9 @@ def make_http_handler(runtime: TvLightOnRuntime):
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(html_bytes)))
+                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                self.send_header("Pragma", "no-cache")
+                self.send_header("Expires", "0")
                 self.end_headers()
                 self.wfile.write(html_bytes)
                 return
@@ -527,6 +628,13 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
     server_thread.start()
     _log(f"Web UI & REST API listening on http://0.0.0.0:{web_port}")
 
+    def camera_light_loop() -> None:
+        while True:
+            runtime.update_camera_light()
+            time.sleep(runtime.camera_sample_interval)
+
+    threading.Thread(target=camera_light_loop, daemon=True).start()
+
     # Initial poll of Tapo A & Tapo B
     try:
         with runtime.lock:
@@ -557,7 +665,9 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                 "SERVICE_START",
                 f"tvlighton Service Active (Port {web_port})",
                 f"Monitoring Tapo A ({runtime.client_a.host}) -> Tapo B ({runtime.client_b.host}), "
-                f"ON >= {auto.get('on_threshold_watts', 10.0)}W, OFF <= {auto.get('off_threshold_watts', 5.0)}W",
+                f"ON >= {auto.get('on_threshold_watts', 10.0)}W, "
+                f"OFF <= {auto.get('off_threshold_watts', 5.0)}W, "
+                f"Light-On 0-{auto.get('lux_threshold', 60.0)} lux",
                 runtime.state_a,
                 runtime.state_b,
                 runtime.state_a["latency_ms"] + runtime.state_b["latency_ms"],
@@ -573,6 +683,7 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
         poll_sec = float(auto_cfg.get("poll_interval_seconds", 1.5))
         on_watts = float(auto_cfg.get("on_threshold_watts", 10.0))
         off_watts = float(auto_cfg.get("off_threshold_watts", 5.0))
+        lux_threshold = float(auto_cfg.get("lux_threshold", 60.0))
         debounce_n = int(auto_cfg.get("debounce_readings", 2))
         auto_off = bool(auto_cfg.get("turn_off_bulb_when_tv_off", True))
         keep_a_on = bool(auto_cfg.get("keep_tapo_a_always_on", True))
@@ -585,6 +696,12 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
 
                 watts_a = runtime.state_a["watts"]
                 bulb_is_on = runtime.state_b["relay_on"]
+                light_lux = (
+                    float(runtime.camera_light["value"])
+                    if runtime.camera_light.get("online")
+                    and runtime.camera_light.get("value") is not None
+                    else None
+                )
 
                 runtime.recent_samples.append(
                     {
@@ -593,6 +710,7 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                         "b_w": runtime.state_b["watts"],
                         "a_on": runtime.state_a["relay_on"],
                         "b_on": bulb_is_on,
+                        "camera_lux": runtime.camera_light.get("value"),
                     }
                 )
 
@@ -636,6 +754,25 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                     runtime.high_streak = 0
                     runtime.low_streak = 0
 
+                if light_lux is None:
+                    runtime.dark_streak = 0
+                    runtime.bright_streak = 0
+                elif light_lux <= lux_threshold:
+                    runtime.dark_streak += 1
+                    runtime.bright_streak = 0
+                else:
+                    runtime.bright_streak += 1
+                    runtime.dark_streak = 0
+
+                if runtime.low_streak >= debounce_n:
+                    runtime.lux_lockout = False
+                elif (
+                    not bulb_is_on
+                    and runtime.high_streak >= debounce_n
+                    and runtime.bright_streak >= debounce_n
+                ):
+                    runtime.lux_lockout = True
+
                 if runtime.high_streak == debounce_n and prev_a_active is not True:
                     prev_a_active = True
                     runtime.history.record_operation(
@@ -660,9 +797,22 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                         )
                     prev_a_active = False
 
-                # Trigger Tapo B (Bulb) ON or OFF
-                if runtime.high_streak >= debounce_n and not bulb_is_on:
-                    _log(f"TV active ({watts_a:.2f}W >= {on_watts:.1f}W) -> Turning Tapo B (Bulb) ON")
+                # Keep Tapo B lit only while TV is active and lux is inside the 0-X range.
+                bulb_action = decide_automatic_bulb_action(
+                    bulb_is_on,
+                    runtime.high_streak,
+                    runtime.low_streak,
+                    runtime.dark_streak,
+                    runtime.bright_streak,
+                    runtime.lux_lockout,
+                    debounce_n,
+                    auto_off,
+                )
+                if bulb_action is True:
+                    _log(
+                        f"TV active ({watts_a:.2f}W) and room dark ({light_lux:.1f} lux "
+                        f"<= {lux_threshold:.1f}) -> Turning Tapo B (Bulb) ON"
+                    )
                     t0 = time.perf_counter()
                     runtime.client_b.set_device_on(True)
                     lat = int((time.perf_counter() - t0) * 1000)
@@ -672,13 +822,26 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                         "TAPO_B",
                         "AUTO_TRIGGER_ON",
                         "Turned Tapo B (Bulb) ON",
-                        f"Triggered by Tapo A TV load ({watts_a:.2f}W >= {on_watts:.1f}W threshold for {debounce_n} readings)",
+                        f"Triggered by TV load ({watts_a:.2f}W >= {on_watts:.1f}W) and "
+                        f"light inside range ({light_lux:.1f} lux <= {lux_threshold:.1f}) "
+                        f"for {debounce_n} readings",
                         runtime.state_a,
                         runtime.state_b,
                         lat,
                     )
-                elif auto_off and runtime.low_streak >= debounce_n and bulb_is_on:
-                    _log(f"TV standby/off ({watts_a:.2f}W <= {off_watts:.1f}W) -> Turning Tapo B (Bulb) OFF")
+                elif bulb_action is False:
+                    if auto_off and runtime.low_streak >= debounce_n:
+                        off_reason = (
+                            f"TV standby ({watts_a:.2f}W <= {off_watts:.1f}W) "
+                            f"for {debounce_n} readings"
+                        )
+                    else:
+                        off_reason = (
+                            f"light above range ({light_lux:.1f} lux > {lux_threshold:.1f}) "
+                            f"for {debounce_n} readings"
+                        )
+                        runtime.lux_lockout = True
+                    _log(f"{off_reason} -> Turning Tapo B (Bulb) OFF")
                     t0 = time.perf_counter()
                     runtime.client_b.set_device_on(False)
                     lat = int((time.perf_counter() - t0) * 1000)
@@ -688,7 +851,7 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                         "TAPO_B",
                         "AUTO_TRIGGER_OFF",
                         "Turned Tapo B (Bulb) OFF",
-                        f"Triggered by Tapo A TV standby ({watts_a:.2f}W <= {off_watts:.1f}W threshold for {debounce_n} readings)",
+                        f"Triggered by {off_reason}",
                         runtime.state_a,
                         runtime.state_b,
                         lat,

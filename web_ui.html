@@ -236,6 +236,14 @@
     }
     .summary-item .label { font-size: 12px; color: var(--muted); }
     .summary-item .value { font-size: 22px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .summary-item .detail { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .summary-item.camera-light {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(180, 83, 9, 0.10));
+      border-color: rgba(245, 158, 11, 0.65);
+      box-shadow: inset 0 0 20px rgba(245, 158, 11, 0.06);
+    }
+    .summary-item.camera-light .label,
+    .summary-item.camera-light .value { color: #fbbf24; }
 
     .chart-wrap {
       width: 100%;
@@ -330,6 +338,89 @@
       margin-bottom: 5px;
     }
     .field input { width: 100%; }
+    .field input[type="range"] {
+      padding: 0;
+      accent-color: var(--blue);
+      cursor: pointer;
+    }
+    .lux-range-shell {
+      position: relative;
+      height: 20px;
+      display: flex;
+      align-items: center;
+    }
+    .lux-slider input[type="range"] {
+      --range-progress: 12%;
+      position: relative;
+      z-index: 2;
+      height: 20px;
+      margin: 0;
+      background: transparent;
+      accent-color: var(--amber);
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .lux-slider input[type="range"]::-webkit-slider-runnable-track {
+      height: 6px;
+      border-radius: 999px;
+      background: linear-gradient(
+        to right,
+        var(--amber) 0%,
+        var(--amber) var(--range-progress),
+        #374151 var(--range-progress),
+        #374151 100%
+      );
+    }
+    .lux-slider input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      margin-top: -5px;
+      border: 2px solid #fffbeb;
+      border-radius: 50%;
+      background: var(--amber);
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
+    }
+    .lux-slider input[type="range"]::-moz-range-track {
+      height: 6px;
+      border-radius: 999px;
+      background: #374151;
+    }
+    .lux-slider input[type="range"]::-moz-range-progress {
+      height: 6px;
+      border-radius: 999px;
+      background: var(--amber);
+    }
+    .lux-slider input[type="range"]::-moz-range-thumb {
+      width: 12px;
+      height: 12px;
+      border: 2px solid #fffbeb;
+      border-radius: 50%;
+      background: var(--amber);
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
+    }
+    .lux-range-shell::before {
+      content: "";
+      position: absolute;
+      z-index: 3;
+      left: 0;
+      top: 50%;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #fffbeb;
+      border-radius: 50%;
+      background: var(--amber);
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+    .range-value {
+      float: right;
+      color: var(--text);
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
     .toast {
       position: fixed;
       bottom: 20px;
@@ -376,6 +467,11 @@
       <div class="summary-item">
         <div class="label">Auto TV &rarr; Bulb Triggers</div>
         <div class="value" id="stat-auto-triggers">0</div>
+      </div>
+      <div class="summary-item camera-light" title="Estimated ambient lux from the CCX camera auto-exposure metadata.">
+        <div class="label">CCX Camera Light</div>
+        <div class="value" id="camera-light-value">-- lux</div>
+        <div class="detail" id="camera-light-detail">Waiting for camera sample</div>
       </div>
       <div class="summary-item">
         <div class="label">Manual Operations</div>
@@ -489,17 +585,23 @@
         <div class="card-header">
           <div>
             <div class="card-title">Automation Thresholds &amp; Parameters</div>
-            <div class="card-subtitle">Changes apply immediately and are logged in Operation History</div>
+            <div class="card-subtitle">Tapo B is lit only while TV power is active and camera lux is inside the selected 0–X range</div>
           </div>
         </div>
         <div class="config-grid">
           <div class="field">
-            <label>TV ON Threshold (Watts)</label>
-            <input type="number" step="0.5" id="cfg-on-watts" value="10.0" />
+            <label>TV ON Threshold <span class="range-value" id="cfg-on-watts-value">10.0 W</span></label>
+            <input type="range" min="0" max="100" step="0.5" id="cfg-on-watts" value="10.0" oninput="syncRangeLabels()" />
           </div>
           <div class="field">
-            <label>TV OFF Threshold (Watts)</label>
-            <input type="number" step="0.5" id="cfg-off-watts" value="5.0" />
+            <label>TV OFF Threshold <span class="range-value" id="cfg-off-watts-value">5.0 W</span></label>
+            <input type="range" min="0" max="50" step="0.5" id="cfg-off-watts" value="5.0" oninput="syncRangeLabels()" />
+          </div>
+          <div class="field lux-slider">
+            <label>Light-On Range <span class="range-value" id="cfg-lux-value">60 lux</span></label>
+            <div class="lux-range-shell">
+              <input type="range" min="0" max="500" step="5" id="cfg-lux" value="60" oninput="syncRangeLabels()" />
+            </div>
           </div>
           <div class="field">
             <label>Poll Interval (Seconds)</label>
@@ -597,29 +699,60 @@
       return `<span class="badge badge-sys">${ev}</span>`;
     }
 
+    function syncRangeLabels() {
+      document.getElementById('cfg-on-watts-value').textContent =
+        `${Number(document.getElementById('cfg-on-watts').value).toFixed(1)} W`;
+      document.getElementById('cfg-off-watts-value').textContent =
+        `${Number(document.getElementById('cfg-off-watts').value).toFixed(1)} W`;
+      const luxInput = document.getElementById('cfg-lux');
+      const luxValue = Number(luxInput.value);
+      const luxMin = Number(luxInput.min);
+      const luxMax = Number(luxInput.max);
+      const progress = ((luxValue - luxMin) / (luxMax - luxMin)) * 100;
+      document.getElementById('cfg-lux-value').textContent = `${luxValue.toFixed(0)} lux`;
+      luxInput.style.setProperty('--range-progress', `${progress}%`);
+    }
+
     async function fetchStatus() {
       try {
         const res = await fetch('/api/status');
         const data = await res.json();
 
-        document.getElementById('host-label').textContent = data.hostname || 'ropihung';
+        document.getElementById('host-label').textContent = data.hostname || 'CCX';
         document.getElementById('last-updated').textContent = 'Updated: ' + (data.timestamp || '--');
 
         const a = data.tapo_a || {};
         const b = data.tapo_b || {};
+        const light = data.camera_light || {};
         const cfg = data.automation || {};
         currentConfig = cfg;
 
         if (!configInitialized && cfg.on_threshold_watts !== undefined) {
           document.getElementById('cfg-on-watts').value = cfg.on_threshold_watts;
           document.getElementById('cfg-off-watts').value = cfg.off_threshold_watts;
+          document.getElementById('cfg-lux').value = cfg.lux_threshold ?? 60;
           document.getElementById('cfg-poll-sec').value = cfg.poll_interval_seconds;
           document.getElementById('cfg-debounce').value = cfg.debounce_readings;
+          syncRangeLabels();
           configInitialized = true;
         }
 
         document.getElementById('stat-thresholds').textContent =
-          `ON ≥ ${cfg.on_threshold_watts}W / OFF ≤ ${cfg.off_threshold_watts}W`;
+          `ON ≥ ${cfg.on_threshold_watts}W / OFF ≤ ${cfg.off_threshold_watts}W / Lux 0–${cfg.lux_threshold ?? 60}`;
+
+        const lightValue = document.getElementById('camera-light-value');
+        const lightDetail = document.getElementById('camera-light-detail');
+        if (light.online && light.value !== null && light.value !== undefined) {
+          lightValue.textContent = `${Number(light.value).toFixed(1)} lux`;
+          lightValue.style.color = '#fbbf24';
+          const exposureMs = light.exposure_time_us ? (Number(light.exposure_time_us) / 1000).toFixed(1) : '--';
+          const gain = light.analogue_gain ? Number(light.analogue_gain).toFixed(2) : '--';
+          lightDetail.textContent = `Exposure ${exposureMs} ms · Gain ${gain}× · ${light.sampled_at || '--'}`;
+        } else {
+          lightValue.textContent = 'Unavailable';
+          lightValue.style.color = 'var(--red)';
+          lightDetail.textContent = light.error || 'Camera is offline';
+        }
 
         // Update Tapo A
         document.getElementById('a-nickname').textContent = a.nickname || 'WSC1F Tapo A P110M';
@@ -754,6 +887,7 @@
         const payload = {
           on_threshold_watts: parseFloat(document.getElementById('cfg-on-watts').value),
           off_threshold_watts: parseFloat(document.getElementById('cfg-off-watts').value),
+          lux_threshold: parseFloat(document.getElementById('cfg-lux').value),
           poll_interval_seconds: parseFloat(document.getElementById('cfg-poll-sec').value),
           debounce_readings: parseInt(document.getElementById('cfg-debounce').value, 10)
         };

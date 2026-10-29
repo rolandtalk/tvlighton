@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive terminal setup for Tapo credentials (hidden password input) + sync to ropihung."""
+"""Interactive terminal setup for Tapo credentials (hidden password input) + sync to CCX."""
 
 import getpass
 import json
@@ -43,16 +43,16 @@ def main() -> None:
     os.chmod(CONFIG_PATH, 0o600)
     print(f"\n2. Saved credentials to {CONFIG_PATH} (permissions 0600).")
 
-    # Sync to ropihung and start service
-    print("3. Syncing config.json to ropihung and starting tvlighton.service...")
+    # Sync to CCX and start service
+    print("3. Syncing config.json to CCX and starting tvlighton.service...")
     subprocess.run(
-        ["scp", str(CONFIG_PATH), "ropihung:/home/ropi/tvlighton/config.json"],
+        ["scp", str(CONFIG_PATH), "ropi@ccx.local:/home/ropi/tvlighton/config.json"],
         check=True,
     )
     subprocess.run(
         [
             "ssh",
-            "ropihung",
+            "ropi@ccx.local",
             "chmod 600 /home/ropi/tvlighton/config.json && "
             "systemctl --user daemon-reload && "
             "systemctl --user enable --now tvlighton.service && "
@@ -62,7 +62,7 @@ def main() -> None:
         ],
         check=True,
     )
-    print("\nSuccess! Tapo TV -> Bulb automation is now live on ropihung.")
+    print("\nSuccess! Tapo TV + camera Lux -> Bulb automation is now live on CCX.")
 
 
 if __name__ == "__main__":

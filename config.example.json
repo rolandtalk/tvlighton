@@ -20,8 +20,13 @@
     "poll_interval_seconds": 1.5,
     "on_threshold_watts": 10.0,
     "off_threshold_watts": 5.0,
+    "lux_threshold": 60.0,
     "debounce_readings": 2,
     "turn_off_bulb_when_tv_off": true,
     "keep_tapo_a_always_on": true
+  },
+  "camera_light": {
+    "state_url": "http://127.0.0.1:8080/state",
+    "sample_interval_seconds": 5.0
   }
 }

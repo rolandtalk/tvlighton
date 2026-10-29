@@ -1,0 +1,9 @@
+[Unit]
+Description=Forward the existing tvlighton tunnel endpoint to CCX
+
+[Socket]
+ListenStream=127.0.0.1:8010
+NoDelay=true
+
+[Install]
+WantedBy=sockets.target

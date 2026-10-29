@@ -1,9 +1,10 @@
 # `tvlighton` — Tapo P110M TV-to-Bulb Smart Home Controller & Web UI (`tv.usdollar.win`)
 
-Zero-dependency local LAN smart home controller and real-time web console for TP-Link **Tapo P110M** smart plugs using the **KLAP v2** protocol.
+Zero-dependency local LAN smart home controller and real-time web console for TP-Link **Tapo P110M** smart plugs using the **KLAP v2** protocol, with an IMX290 camera Lux gate.
 
-* **TV Turned ON** &rarr; **Tapo A** (`192.168.31.9`) detects current/wattage rise &rarr; **`ropihung`** Raspberry Pi (`192.168.31.217`) signals **Tapo B** (`192.168.31.136`) &rarr; **Bulb Turns ON**.
-* **Web Dashboard & Detailed Operation History**: Served on port `8010` (`http://ropihung.local:8010` / `https://tv.usdollar.win`).
+* **TV Turned ON + room inside the Light-On Range** &rarr; **Tapo A** (`192.168.31.9`) detects current/wattage and **CCX** reads native camera Lux metadata &rarr; **Tapo B** (`192.168.31.136`) turns the bulb on.
+* **Above the Light-On Range or TV OFF** &rarr; **Tapo B turns OFF**. A Lux lockout prevents the bulb's own light from causing an ON/OFF feedback loop until the next TV cycle.
+* **Web Dashboard & Detailed Operation History**: Served on port `8010` (`http://ccx.local:8010` / `https://tv.usdollar.win`).
 
 ---
 
@@ -13,7 +14,8 @@ Zero-dependency local LAN smart home controller and real-time web console for TP
 | :--- | :--- | :--- | :--- | :--- |
 | **Tapo A** (TV Current Sensor) | `WSC1F Tapo A P110M` | `192.168.31.9` | `EC-B9-31-25-07-E7` | `703641078388d1ea1b197481d1cbbae9` |
 | **Tapo B** (Bulb Switch) | `WSC Tapo B P110M` | `192.168.31.136` | `EC-B9-31-24-FD-FF` | `0f8ba32d18c577b38c27f77031e37e2d` |
-| **Controller SBC** | `ropihung` | `192.168.31.217` (`ropihung.local`) | `88:A2:9E:F0:91:30` | Raspberry Pi 5 (`aarch64`) |
+| **Controller SBC** | `CCX` | `192.168.31.204` (`ccx.local`) | `B8:27:EB:2B:92:A3` | Raspberry Pi 3 Model A+ Rev 1.0 |
+| **Camera light source** | `IMX290 CSI` | `http://ccx.local:8080/state` | — | Native libcamera Lux/exposure/gain metadata |
 
 ---
 
@@ -23,6 +25,8 @@ The `tvlighton.service` daemon runs both the `1.5s` KLAP v2 monitoring loop and 
 
 * **Live Tapo A & Tapo B Telemetry Cards**: Real-time wattage (`W` & `mW`), relay status (`ON`/`OFF`), today's energy (`Wh`) and runtime (`mins`), Wi-Fi RSSI (`dBm`), and KLAP v2 round-trip latency (`ms`).
 * **Real-Time Power Telemetry Chart**: Live canvas plot of Tapo A (TV Watts) and Tapo B (Bulb Watts) against configurable ON/OFF thresholds.
+* **CCX Camera Light**: Native IMX290 Lux, exposure, and gain telemetry. The orange **Light-On Range** slider controls the maximum Lux at which the bulb may be lit.
+* **Slider Controls**: TV ON power, TV OFF power, and Light-On Range thresholds are adjustable from the dashboard and saved to `config.json`.
 * **Detailed Tapo A / Tapo B Operation History (`tvlighton_history.db`)**:
   * Logs every automatic trigger (`AUTO_TRIGGER_ON`, `AUTO_TRIGGER_OFF`), device power/relay state transition (`STATE_CHANGE`), manual switch (`MANUAL_CONTROL`), service/config update (`SERVICE_START`), and error (`ERROR`).
   * Records full device state snapshots (`Relay`, `W`, `mW`, `Today Wh`, `RSSI`, `KLAP Latency`) for both **Tapo A** and **Tapo B** on every operation.
@@ -30,14 +34,14 @@ The `tvlighton.service` daemon runs both the `1.5s` KLAP v2 monitoring loop and 
 
 ### REST Endpoints
 * `GET /` — Interactive Web UI (`web_ui.html`)
-* `GET /api/status` — Live status of Tapo A, Tapo B, thresholds, streaks, and chart telemetry
+* `GET /api/status` — Live status of Tapo A, Tapo B, camera Lux, thresholds, streaks, lockout, and chart telemetry
 * `GET /api/history?limit=200&device=TAPO_B&event_type=AUTO_TRIGGER_ON` — Detailed operation history from SQLite
 * `POST /api/control` — Manual switch (`{"target": "tapo_b", "state": true}`)
-* `POST /api/config` — Live threshold update (`{"on_threshold_watts": 10.0, "off_threshold_watts": 5.0, "poll_interval_seconds": 1.5, "debounce_readings": 2}`)
+* `POST /api/config` — Live threshold update (`{"on_threshold_watts": 10.0, "off_threshold_watts": 5.0, "lux_threshold": 50.0, "poll_interval_seconds": 1.5, "debounce_readings": 2}`)
 
 ---
 
-## CLI Usage on `ropihung`
+## CLI Usage on `CCX`
 
 ```bash
 # 1. Discover Tapo units on LAN
@@ -57,7 +61,29 @@ systemctl --user restart tvlighton.service
 
 ---
 
-## Enabling `tv.usdollar.win` on Cloudflare Tunnel (`ropihung`)
+## Camera Lux Metadata on CCX
+
+`tvlighton.py` reads `result.light.lux` from the local camera streamer's `/state` endpoint. The matching streamer source is tracked at `deploy/cca/cca-csi-stream.py`; it adds continuous rpicam metadata parsing without writing an ever-growing metadata file.
+
+Install it at `/usr/local/lib/cca/cca-csi-stream.py`, restart `cca-stream.service`, and confirm:
+
+```bash
+curl http://127.0.0.1:8080/state
+```
+
+## Existing `tv.usdollar.win` Cloudflare Tunnel (`ropihung`)
+
+The Cloudflare tunnel remains on `ropihung`, while the controller runs on CCX. The socket-proxy units under `deploy/ropihung/` forward only the dashboard traffic from `127.0.0.1:8010` on ropihung to `192.168.31.204:8010` on CCX.
+
+Install and enable them as the `ropi` user on ropihung:
+
+```bash
+cp deploy/ropihung/tvlighton-proxy.* ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now tvlighton-proxy.socket
+```
+
+For a fresh tunnel configuration on `ropihung`:
 
 1. Run the helper script on `ropihung` to add `tv.usdollar.win -> http://127.0.0.1:8010` to `/etc/cloudflared/config.yml` and restart `cloudflared`:
    ```bash

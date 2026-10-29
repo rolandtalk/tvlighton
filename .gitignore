@@ -5,3 +5,7 @@ config.json
 __pycache__/
 *.pyc
 .DS_Store
+.venv/
+.deps/
+.staging/
+*.before-*
