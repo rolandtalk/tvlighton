@@ -95,6 +95,15 @@ def decide_automatic_bulb_action(
     return None
 
 
+def classify_tv_power(watts: float, on_min_watts: float, on_max_watts: float, off_watts: float) -> str:
+    """Classify TV power as on, off, or transition for debounce tracking."""
+    if on_min_watts <= watts <= on_max_watts:
+        return "on"
+    if watts <= off_watts or watts > on_max_watts:
+        return "off"
+    return "transition"
+
+
 # ---------------------------------------------------------------------------
 # SQLite Operation History & Telemetry Store
 # ---------------------------------------------------------------------------
@@ -164,7 +173,7 @@ class HistoryStore:
                         "2026-10-27 21:17:28",
                         "SYSTEM",
                         "SERVICE_START",
-                        "Threshold Calibrated (ON >= 10.0W, OFF <= 5.0W)",
+                        "Threshold Calibrated (ON 40.0-120.0W, OFF <= 5.0W)",
                         "Adjusted TV ON threshold from 15.0W to 10.0W to match 14.39W active load on Tapo A",
                         1, 14.39, 14389, 17, -39,
                         1, 2.15, 2153, 2, -50,
@@ -305,7 +314,9 @@ class TvLightOnRuntime:
     def __init__(self, cfg_path: Path, email: str, password: str):
         self.cfg_path = cfg_path
         self.cfg = load_config(cfg_path)
-        self.cfg.setdefault("automation", {}).setdefault("lux_threshold", 60.0)
+        automation_cfg = self.cfg.setdefault("automation", {})
+        automation_cfg.setdefault("lux_threshold", 60.0)
+        automation_cfg.setdefault("on_max_watts", 120.0)
         self.email = email
         self.password = password
         self.lock = threading.Lock()
@@ -423,10 +434,17 @@ class TvLightOnRuntime:
         with self.lock:
             auto = self.cfg.setdefault("automation", {})
             old_on = auto.get("on_threshold_watts", 10.0)
+            old_on_max = auto.get("on_max_watts", 120.0)
             old_off = auto.get("off_threshold_watts", 5.0)
             old_lux = auto.get("lux_threshold", 60.0)
             if "on_threshold_watts" in payload:
                 auto["on_threshold_watts"] = float(payload["on_threshold_watts"])
+            if "on_max_watts" in payload:
+                auto["on_max_watts"] = float(payload["on_max_watts"])
+            on_min = max(0.0, float(auto.get("on_threshold_watts", 0.0)))
+            on_max = max(0.0, float(auto.get("on_max_watts", 120.0)))
+            auto["on_threshold_watts"] = min(on_min, on_max)
+            auto["on_max_watts"] = max(on_min, on_max)
             if "off_threshold_watts" in payload:
                 auto["off_threshold_watts"] = float(payload["off_threshold_watts"])
             if "lux_threshold" in payload:
@@ -440,12 +458,12 @@ class TvLightOnRuntime:
             os.chmod(self.cfg_path, 0o600)
 
             action = (
-                f"Updated Thresholds (ON >= {auto['on_threshold_watts']}W, "
+                f"Updated Thresholds (ON {auto['on_threshold_watts']}-{auto['on_max_watts']}W, "
                 f"OFF <= {auto['off_threshold_watts']}W, Light-On 0-{auto['lux_threshold']} lux)"
             )
             reason = (
-                f"Changed via Web UI from ON>={old_on}W / OFF<={old_off}W / Light-On 0-{old_lux} lux to "
-                f"ON>={auto['on_threshold_watts']}W / OFF<={auto['off_threshold_watts']}W "
+                f"Changed via Web UI from ON {old_on}-{old_on_max}W / OFF<={old_off}W / Light-On 0-{old_lux} lux to "
+                f"ON {auto['on_threshold_watts']}-{auto['on_max_watts']}W / OFF<={auto['off_threshold_watts']}W "
                 f"/ Light-On 0-{auto['lux_threshold']} lux "
                 f"(poll={auto['poll_interval_seconds']}s, debounce={auto['debounce_readings']})"
             )
@@ -659,7 +677,7 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                 "SERVICE_START",
                 f"tvlighton Service Active (Port {web_port})",
                 f"Monitoring Tapo A ({runtime.client_a.host}) -> Tapo B ({runtime.client_b.host}), "
-                f"ON >= {auto.get('on_threshold_watts', 10.0)}W, "
+                f"ON {auto.get('on_threshold_watts', 10.0)}-{auto.get('on_max_watts', 120.0)}W, "
                 f"OFF <= {auto.get('off_threshold_watts', 5.0)}W, "
                 f"Light-On 0-{auto.get('lux_threshold', 60.0)} lux",
                 runtime.state_a,
@@ -676,6 +694,7 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
         auto_cfg = runtime.cfg.get("automation", {})
         poll_sec = float(auto_cfg.get("poll_interval_seconds", 1.5))
         on_watts = float(auto_cfg.get("on_threshold_watts", 10.0))
+        on_max_watts = float(auto_cfg.get("on_max_watts", 120.0))
         off_watts = float(auto_cfg.get("off_threshold_watts", 5.0))
         lux_threshold = float(auto_cfg.get("lux_threshold", 60.0))
         debounce_n = int(auto_cfg.get("debounce_readings", 2))
@@ -738,10 +757,11 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                     )
 
                 # Track streaks & log significant TV power state transitions on Tapo A
-                if watts_a >= on_watts:
+                power_state = classify_tv_power(watts_a, on_watts, on_max_watts, off_watts)
+                if power_state == "on":
                     runtime.high_streak += 1
                     runtime.low_streak = 0
-                elif watts_a <= off_watts:
+                elif power_state == "off":
                     runtime.low_streak += 1
                     runtime.high_streak = 0
                 else:
@@ -764,7 +784,8 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                         "TAPO_A",
                         "STATE_CHANGE",
                         f"Tapo A TV Active Power Detected ({watts_a:.2f}W)",
-                        f"TV power rose to {watts_a:.2f}W ({runtime.state_a['mw']} mW) >= {on_watts:.1f}W for {debounce_n} consecutive readings",
+                        f"TV power entered the On Range at {watts_a:.2f}W ({runtime.state_a['mw']} mW), "
+                        f"inside {on_watts:.1f}-{on_max_watts:.1f}W for {debounce_n} consecutive readings",
                         runtime.state_a,
                         runtime.state_b,
                         runtime.state_a["latency_ms"],
@@ -775,7 +796,9 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                             "TAPO_A",
                             "STATE_CHANGE",
                             f"Tapo A TV Standby/Off Detected ({watts_a:.2f}W)",
-                            f"TV power dropped to {watts_a:.2f}W ({runtime.state_a['mw']} mW) <= {off_watts:.1f}W for {debounce_n} consecutive readings",
+                            f"TV power left the On Range at {watts_a:.2f}W ({runtime.state_a['mw']} mW); "
+                            f"On Range is {on_watts:.1f}-{on_max_watts:.1f}W and OFF cutoff is <= {off_watts:.1f}W, "
+                            f"for {debounce_n} consecutive readings",
                             runtime.state_a,
                             runtime.state_b,
                             runtime.state_a["latency_ms"],
@@ -806,7 +829,7 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                         "TAPO_B",
                         "AUTO_TRIGGER_ON",
                         "Turned Tapo B (Bulb) ON",
-                        f"Triggered by TV load ({watts_a:.2f}W >= {on_watts:.1f}W) and "
+                        f"Triggered by TV load ({watts_a:.2f}W inside {on_watts:.1f}-{on_max_watts:.1f}W) and "
                         f"light inside range ({light_lux:.1f} lux <= {lux_threshold:.1f}) "
                         f"for {debounce_n} readings",
                         runtime.state_a,
@@ -815,10 +838,16 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                     )
                 elif bulb_action is False:
                     if auto_off and runtime.low_streak >= debounce_n:
-                        off_reason = (
-                            f"TV standby ({watts_a:.2f}W <= {off_watts:.1f}W) "
-                            f"for {debounce_n} readings"
-                        )
+                        if watts_a > on_max_watts:
+                            off_reason = (
+                                f"TV power above On Range ({watts_a:.2f}W > {on_max_watts:.1f}W) "
+                                f"for {debounce_n} readings"
+                            )
+                        else:
+                            off_reason = (
+                                f"TV standby ({watts_a:.2f}W <= {off_watts:.1f}W) "
+                                f"for {debounce_n} readings"
+                            )
                     else:
                         off_reason = (
                             f"light above range ({light_lux:.1f} lux > {lux_threshold:.1f}) "

@@ -343,6 +343,85 @@
       accent-color: var(--blue);
       cursor: pointer;
     }
+    .tv-on-range-shell {
+      --on-start: 33.333%;
+      --on-end: 100%;
+      position: relative;
+      height: 20px;
+    }
+    .tv-on-range-shell::before,
+    .tv-on-range-fill {
+      content: "";
+      position: absolute;
+      top: 50%;
+      height: 6px;
+      border-radius: 999px;
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+    .tv-on-range-shell::before {
+      z-index: 0;
+      left: 0;
+      right: 0;
+      background: #374151;
+    }
+    .tv-on-range-fill {
+      z-index: 1;
+      left: var(--on-start);
+      right: calc(100% - var(--on-end));
+      background: var(--blue);
+    }
+    .tv-on-range-shell input[type="range"] {
+      position: absolute;
+      z-index: 2;
+      inset: 0;
+      width: 100%;
+      height: 20px;
+      margin: 0;
+      background: transparent;
+      pointer-events: none;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .tv-on-range-shell input[type="range"]::-webkit-slider-runnable-track {
+      height: 6px;
+      background: transparent;
+    }
+    .tv-on-range-shell input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      margin-top: -5px;
+      border: 2px solid #eff6ff;
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+    .tv-on-range-shell input[type="range"]::-moz-range-track {
+      height: 6px;
+      background: transparent;
+    }
+    .tv-on-range-shell input[type="range"]::-moz-range-thumb {
+      width: 12px;
+      height: 12px;
+      border: 2px solid #eff6ff;
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+    .range-scale {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+    }
     .lux-range-shell {
       position: relative;
       height: 20px;
@@ -414,14 +493,6 @@
       box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
       transform: translateY(-50%);
       pointer-events: none;
-    }
-    .lux-scale {
-      display: flex;
-      justify-content: space-between;
-      margin-top: 2px;
-      color: var(--muted);
-      font-size: 10px;
-      font-variant-numeric: tabular-nums;
     }
     .range-value {
       float: right;
@@ -583,9 +654,14 @@
           </div>
         </div>
         <div class="config-grid">
-          <div class="field">
-            <label>TV ON Threshold <span class="range-value" id="cfg-on-watts-value">10.0 W</span></label>
-            <input type="range" min="0" max="100" step="0.5" id="cfg-on-watts" value="10.0" oninput="syncRangeLabels()" />
+          <div class="field tv-on-slider">
+            <label>TV On Range <span class="range-value" id="cfg-on-watts-value">40–120 W</span></label>
+            <div class="tv-on-range-shell" id="tv-on-range-shell">
+              <div class="tv-on-range-fill"></div>
+              <input type="range" min="0" max="3" step="1" id="cfg-on-min" value="1" oninput="syncTvOnRange('min')" aria-label="TV On Range minimum" />
+              <input type="range" min="0" max="3" step="1" id="cfg-on-max" value="3" oninput="syncTvOnRange('max')" aria-label="TV On Range maximum" />
+            </div>
+            <div class="range-scale" aria-hidden="true"><span>0</span><span>40</span><span>80</span><span>120</span></div>
           </div>
           <div class="field">
             <label>TV OFF Threshold <span class="range-value" id="cfg-off-watts-value">5.0 W</span></label>
@@ -596,7 +672,7 @@
             <div class="lux-range-shell">
               <input type="range" min="0" max="4" step="1" id="cfg-lux" value="3" oninput="syncRangeLabels()" aria-label="Maximum Light-On Lux" />
             </div>
-            <div class="lux-scale" aria-hidden="true"><span>0</span><span>15</span><span>30</span><span>60</span><span>120</span></div>
+            <div class="range-scale" aria-hidden="true"><span>0</span><span>15</span><span>30</span><span>60</span><span>120</span></div>
           </div>
           <div class="field">
             <label>Poll Interval (Seconds)</label>
@@ -669,16 +745,39 @@
   <script>
     let cachedHistory = [];
     let cachedSamples = [];
-    let currentConfig = { on_threshold_watts: 10.0, off_threshold_watts: 5.0 };
+    let currentConfig = { on_threshold_watts: 40.0, on_max_watts: 120.0, off_threshold_watts: 5.0 };
     let configInitialized = false;
+    const tvOnScale = [0, 40, 80, 120];
     const luxScale = [0, 15, 30, 60, 120];
 
-    function nearestLuxIndex(value) {
-      return luxScale.reduce(
+    function nearestScaleIndex(scale, value) {
+      return scale.reduce(
         (best, candidate, index) =>
-          Math.abs(candidate - value) < Math.abs(luxScale[best] - value) ? index : best,
+          Math.abs(candidate - value) < Math.abs(scale[best] - value) ? index : best,
         0
       );
+    }
+
+    function nearestLuxIndex(value) {
+      return nearestScaleIndex(luxScale, value);
+    }
+
+    function syncTvOnRange(changed) {
+      const minInput = document.getElementById('cfg-on-min');
+      const maxInput = document.getElementById('cfg-on-max');
+      let minIndex = Number(minInput.value);
+      let maxIndex = Number(maxInput.value);
+      if (minIndex > maxIndex) {
+        if (changed === 'min') maxIndex = minIndex;
+        else minIndex = maxIndex;
+      }
+      minInput.value = minIndex;
+      maxInput.value = maxIndex;
+      document.getElementById('cfg-on-watts-value').textContent =
+        `${tvOnScale[minIndex]}–${tvOnScale[maxIndex]} W`;
+      const shell = document.getElementById('tv-on-range-shell');
+      shell.style.setProperty('--on-start', `${(minIndex / (tvOnScale.length - 1)) * 100}%`);
+      shell.style.setProperty('--on-end', `${(maxIndex / (tvOnScale.length - 1)) * 100}%`);
     }
 
     function showToast(msg) {
@@ -704,8 +803,7 @@
     }
 
     function syncRangeLabels() {
-      document.getElementById('cfg-on-watts-value').textContent =
-        `${Number(document.getElementById('cfg-on-watts').value).toFixed(1)} W`;
+      syncTvOnRange();
       document.getElementById('cfg-off-watts-value').textContent =
         `${Number(document.getElementById('cfg-off-watts').value).toFixed(1)} W`;
       const luxInput = document.getElementById('cfg-lux');
@@ -731,7 +829,8 @@
         currentConfig = cfg;
 
         if (!configInitialized && cfg.on_threshold_watts !== undefined) {
-          document.getElementById('cfg-on-watts').value = cfg.on_threshold_watts;
+          document.getElementById('cfg-on-min').value = nearestScaleIndex(tvOnScale, cfg.on_threshold_watts);
+          document.getElementById('cfg-on-max').value = nearestScaleIndex(tvOnScale, cfg.on_max_watts ?? 120);
           document.getElementById('cfg-off-watts').value = cfg.off_threshold_watts;
           document.getElementById('cfg-lux').value = nearestLuxIndex(cfg.lux_threshold ?? 60);
           document.getElementById('cfg-poll-sec').value = cfg.poll_interval_seconds;
@@ -741,7 +840,7 @@
         }
 
         document.getElementById('stat-thresholds').textContent =
-          `ON ≥ ${cfg.on_threshold_watts}W / OFF ≤ ${cfg.off_threshold_watts}W / Lux 0–${cfg.lux_threshold ?? 60}`;
+          `ON ${cfg.on_threshold_watts}–${cfg.on_max_watts ?? 120}W / OFF ≤ ${cfg.off_threshold_watts}W / Lux 0–${cfg.lux_threshold ?? 60}`;
 
         const lightValue = document.getElementById('camera-light-value');
         const lightDetail = document.getElementById('camera-light-detail');
@@ -765,7 +864,8 @@
         aRelay.className = 'badge ' + (a.relay_on ? 'badge-on' : 'badge-off');
         document.getElementById('a-watts').textContent = (a.watts !== undefined ? a.watts.toFixed(2) : '--') + ' W';
         document.getElementById('a-mw').textContent = (a.mw !== undefined ? a.mw : '--') + ' mW';
-        const tvActive = (a.watts || 0) >= (cfg.on_threshold_watts || 10);
+        const tvWatts = a.watts || 0;
+        const tvActive = tvWatts >= (cfg.on_threshold_watts ?? 40) && tvWatts <= (cfg.on_max_watts ?? 120);
         document.getElementById('a-tv-state').textContent = tvActive ? 'TV ACTIVE' : 'STANDBY / OFF';
         document.getElementById('a-tv-state').style.color = tvActive ? 'var(--green)' : 'var(--muted)';
         document.getElementById('a-streak').textContent = `High: ${data.high_streak || 0} | Low: ${data.low_streak || 0}`;
@@ -882,7 +982,8 @@
     async function saveThresholds() {
       try {
         const payload = {
-          on_threshold_watts: parseFloat(document.getElementById('cfg-on-watts').value),
+          on_threshold_watts: tvOnScale[Number(document.getElementById('cfg-on-min').value)],
+          on_max_watts: tvOnScale[Number(document.getElementById('cfg-on-max').value)],
           off_threshold_watts: parseFloat(document.getElementById('cfg-off-watts').value),
           lux_threshold: luxScale[Number(document.getElementById('cfg-lux').value)],
           poll_interval_seconds: parseFloat(document.getElementById('cfg-poll-sec').value),

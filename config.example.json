@@ -18,7 +18,8 @@
   "automation": {
     "subnet_prefix": "192.168.31",
     "poll_interval_seconds": 1.5,
-    "on_threshold_watts": 10.0,
+    "on_threshold_watts": 40.0,
+    "on_max_watts": 120.0,
     "off_threshold_watts": 5.0,
     "lux_threshold": 60.0,
     "debounce_readings": 2,

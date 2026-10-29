@@ -26,7 +26,7 @@ The `tvlighton.service` daemon runs both the `1.5s` KLAP v2 monitoring loop and 
 * **Live Tapo A & Tapo B Telemetry Cards**: Real-time wattage (`W` & `mW`), relay status (`ON`/`OFF`), today's energy (`Wh`) and runtime (`mins`), Wi-Fi RSSI (`dBm`), and KLAP v2 round-trip latency (`ms`).
 * **Real-Time Power Telemetry Chart**: Live canvas plot of Tapo A (TV Watts) and Tapo B (Bulb Watts) against configurable ON/OFF thresholds.
 * **CCX Camera Light**: Native IMX290 Lux, exposure, and gain telemetry. The orange **Light-On Range** slider controls the maximum Lux at which the bulb may be lit.
-* **Slider Controls**: TV ON power and TV OFF power are adjustable continuously; the Light-On Range uses the discrete nonlinear scale `0 / 15 / 30 / 60 / 120 lux`. Selections are saved to `config.json`.
+* **Slider Controls**: The dual-handle TV On Range uses `0 / 40 / 80 / 120 W`, with the active interval colored between its circular endpoints. TV OFF remains separately adjustable, and the Light-On Range uses `0 / 15 / 30 / 60 / 120 lux`. Selections are saved to `config.json`.
 * **Detailed Tapo A / Tapo B Operation History (`tvlighton_history.db`)**:
   * Logs every automatic trigger (`AUTO_TRIGGER_ON`, `AUTO_TRIGGER_OFF`), device power/relay state transition (`STATE_CHANGE`), manual switch (`MANUAL_CONTROL`), service/config update (`SERVICE_START`), and error (`ERROR`).
   * Records full device state snapshots (`Relay`, `W`, `mW`, `Today Wh`, `RSSI`, `KLAP Latency`) for both **Tapo A** and **Tapo B** on every operation.
@@ -37,7 +37,7 @@ The `tvlighton.service` daemon runs both the `1.5s` KLAP v2 monitoring loop and 
 * `GET /api/status` — Live status of Tapo A, Tapo B, camera Lux, thresholds, debounce streaks, and chart telemetry
 * `GET /api/history?limit=200&device=TAPO_B&event_type=AUTO_TRIGGER_ON` — Detailed operation history from SQLite
 * `POST /api/control` — Manual switch (`{"target": "tapo_b", "state": true}`)
-* `POST /api/config` — Live threshold update (`{"on_threshold_watts": 10.0, "off_threshold_watts": 5.0, "lux_threshold": 50.0, "poll_interval_seconds": 1.5, "debounce_readings": 2}`)
+* `POST /api/config` — Live threshold update (`{"on_threshold_watts": 40.0, "on_max_watts": 120.0, "off_threshold_watts": 5.0, "lux_threshold": 60.0, "poll_interval_seconds": 1.5, "debounce_readings": 2}`)
 
 ---
 

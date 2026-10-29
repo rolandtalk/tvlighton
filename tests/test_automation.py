@@ -34,6 +34,15 @@ class AutomationDecisionTest(unittest.TestCase):
         self.assertIsNone(self.decide(True, high=2, bright=1))
         self.assertIsNone(self.decide(False, high=2, dark=1))
 
+    def test_tv_power_is_on_only_inside_selected_range(self):
+        classify = tvlighton.classify_tv_power
+        self.assertEqual(classify(40, 40, 120, 5), "on")
+        self.assertEqual(classify(80, 40, 120, 5), "on")
+        self.assertEqual(classify(120, 40, 120, 5), "on")
+        self.assertEqual(classify(4, 40, 120, 5), "off")
+        self.assertEqual(classify(121, 40, 120, 5), "off")
+        self.assertEqual(classify(20, 40, 120, 5), "transition")
+
 
 if __name__ == "__main__":
     unittest.main()

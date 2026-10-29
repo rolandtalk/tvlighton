@@ -131,7 +131,7 @@ If the plugs or Raspberry Pi are moved to a new Wi-Fi subnet or a new Tapo accou
 2. Key settings inside `config.json`:
    * `tapo_credentials.email` / `tapo_credentials.password`: TP-Link Tapo account login (Ensure **Third-Party Compatibility** is enabled in the Tapo app under *Me → Third-Party Services*).
    * `automation.subnet_prefix`: First three octets of the LAN subnet (e.g. `"192.168.31"`). Even if DHCP assigns new IPs to Tapo A or Tapo B, the controller automatically finds their new IPs using their MAC addresses (`EC-B9-31-25-07-E7` and `EC-B9-31-24-FD-FF`).
-   * `automation.on_threshold_watts`: Wattage on Tapo A that triggers Tapo B **ON** (currently `10.0` W).
+   * `automation.on_threshold_watts` / `automation.on_max_watts`: Lower and upper endpoints of the Tapo A **TV On Range**. Both endpoints use the `0 / 40 / 80 / 120 W` dashboard scale.
    * `automation.off_threshold_watts`: Wattage on Tapo A that triggers Tapo B **OFF** (currently `5.0` W).
    * `automation.lux_threshold`: Upper end of the camera **Light-On Range**. Camera Lux is evaluated continuously: above this value Tapo B turns off, and when Lux returns to the range Tapo B may turn on again while the TV remains active.
 3. Restart the service to apply changes:
