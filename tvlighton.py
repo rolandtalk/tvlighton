@@ -3,8 +3,11 @@
 
 import argparse
 import base64
+import hashlib
+import hmac
 import json
 import os
+import secrets
 import socket
 import sqlite3
 import sys
@@ -34,6 +37,8 @@ LUX_HISTORY_INTERVAL_SECONDS = 15 * 60
 TAIPEI_LATITUDE = 25.0330
 TAIPEI_LONGITUDE = 121.5654
 DAYLIGHT_CACHE_SECONDS = 6 * 60 * 60
+SETTINGS_PASSWORD_SHA256 = "3c74149664dcf7405b75f5203454f1ced1ea3487f2f4c3cc3fed064613cdeaae"
+SETTINGS_SESSION_SECONDS = 15 * 60
 _daylight_cache: Dict[str, Any] = {}
 _daylight_cache_lock = threading.Lock()
 
@@ -50,6 +55,12 @@ def next_lux_sample_epoch(now_epoch: Optional[float] = None) -> float:
     """Return the next quarter-hour boundary after now."""
     now = time.time() if now_epoch is None else float(now_epoch)
     return float((int(now) // LUX_HISTORY_INTERVAL_SECONDS + 1) * LUX_HISTORY_INTERVAL_SECONDS)
+
+
+def verify_settings_password(password: str) -> bool:
+    """Compare the submitted settings password without storing it in the web UI."""
+    submitted = hashlib.sha256(str(password).encode("utf-8")).hexdigest()
+    return hmac.compare_digest(submitted, SETTINGS_PASSWORD_SHA256)
 
 
 def parse_daylight_payload(payload: Dict[str, Any], requested_date: str) -> Dict[str, Any]:
@@ -560,6 +571,8 @@ class TvLightOnRuntime:
         self.email = email
         self.password = password
         self.lock = threading.Lock()
+        self.settings_auth_lock = threading.Lock()
+        self.settings_tokens: Dict[str, float] = {}
         self.history = HistoryStore(DB_PATH)
 
         self.client_a = TapoKlapClient(self.cfg["tapo_a_tv_sensor"]["ip"], email, password)
@@ -624,6 +637,31 @@ class TvLightOnRuntime:
                 "source": "IMX290 CSI",
                 "error": str(err),
             }
+
+    def create_settings_token(self, password: str) -> Optional[str]:
+        """Issue a short-lived token after a correct settings password."""
+        if not verify_settings_password(password):
+            return None
+        token = secrets.token_urlsafe(32)
+        now_epoch = time.time()
+        with self.settings_auth_lock:
+            self.settings_tokens = {
+                key: expiry for key, expiry in self.settings_tokens.items() if expiry > now_epoch
+            }
+            self.settings_tokens[token] = now_epoch + SETTINGS_SESSION_SECONDS
+        return token
+
+    def verify_settings_token(self, token: Optional[str]) -> bool:
+        """Accept only a current token issued by create_settings_token."""
+        if not token:
+            return False
+        now_epoch = time.time()
+        with self.settings_auth_lock:
+            expiry = self.settings_tokens.get(token)
+            if expiry is None or expiry <= now_epoch:
+                self.settings_tokens.pop(token, None)
+                return False
+            return True
 
     def poll_unit(self, client: TapoKlapClient, unit_cfg: Dict[str, Any], fallback_name: str) -> Dict[str, Any]:
         t0 = time.perf_counter()
@@ -834,11 +872,26 @@ def make_http_handler(runtime: TvLightOnRuntime):
                 return
 
             if parsed.path == "/api/config":
+                if not runtime.verify_settings_token(self.headers.get("X-Settings-Token")):
+                    self._send_json(
+                        {"ok": False, "error": "Settings password required"}, status=401
+                    )
+                    return
                 try:
                     res = runtime.update_thresholds(payload)
                     self._send_json(res)
                 except Exception as err:
                     self._send_json({"ok": False, "error": str(err)}, status=500)
+                return
+
+            if parsed.path == "/api/settings-auth":
+                token = runtime.create_settings_token(str(payload.get("password", "")))
+                if token is None:
+                    self._send_json({"ok": False, "error": "Incorrect password"}, status=401)
+                else:
+                    self._send_json(
+                        {"ok": True, "token": token, "expires_in": SETTINGS_SESSION_SECONDS}
+                    )
                 return
 
             self._send_json({"error": "Not found"}, status=404)

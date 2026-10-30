@@ -123,6 +123,7 @@
       <div class="config-grid">
         <div class="field"><label for="cfg-poll-sec">Poll Interval (Seconds)</label><input type="number" min="0.5" step="0.5" id="cfg-poll-sec" value="1.5" /></div>
         <div class="field"><label for="cfg-debounce">Debounce Readings</label><input type="number" min="1" step="1" id="cfg-debounce" value="2" /></div>
+        <div class="field"><label for="runtime-password">Settings Password</label><input type="password" inputmode="numeric" id="runtime-password" placeholder="Required to save" autocomplete="current-password" /></div>
         <button class="btn-primary" onclick="saveRuntimeParameters()">Save Runtime Parameters</button>
       </div>
     </section>
@@ -189,10 +190,22 @@
         debounce_readings: parseInt(document.getElementById('cfg-debounce').value, 10)
       };
       try {
-        const response = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const authResponse = await fetch('/api/settings-auth', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: document.getElementById('runtime-password').value })
+        });
+        const auth = await authResponse.json();
+        if (!authResponse.ok || !auth.ok) {
+          showToast(`Error: ${auth.error || 'Incorrect password'}`);
+          return;
+        }
+        const response = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Settings-Token': auth.token }, body: JSON.stringify(payload) });
         const data = await response.json();
         showToast(data.ok ? 'Runtime parameters updated & saved' : `Error: ${data.error || 'Save failed'}`);
-        if (data.ok) await fetchStatus();
+        if (data.ok) {
+          document.getElementById('runtime-password').value = '';
+          await fetchStatus();
+        }
       } catch (error) { showToast(`Save error: ${error}`); }
     }
 

@@ -98,6 +98,11 @@ class AutomationDecisionTest(unittest.TestCase):
         self.assertEqual(daylight["sunset_time"], "17:14")
         self.assertEqual(daylight["source"], "Open-Meteo")
 
+    def test_settings_password_is_verified_server_side(self):
+        self.assertTrue(tvlighton.verify_settings_password("4214"))
+        self.assertFalse(tvlighton.verify_settings_password("4215"))
+        self.assertFalse(tvlighton.verify_settings_password(""))
+
 
 if __name__ == "__main__":
     unittest.main()

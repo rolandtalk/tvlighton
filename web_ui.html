@@ -218,12 +218,44 @@
       border-color: #4b5563;
       background: #243044;
     }
+    button:disabled, input:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
     .btn-primary {
       background: var(--blue);
       border-color: var(--blue);
       color: #fff;
     }
     .btn-primary:hover { background: #2563eb; }
+    .btn-edit {
+      background: var(--amber-bg);
+      border-color: rgba(245, 158, 11, 0.5);
+      color: #fbbf24;
+    }
+    .btn-edit:hover { background: rgba(245, 158, 11, 0.24); }
+    dialog {
+      width: min(90vw, 380px);
+      margin: auto;
+      padding: 22px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--panel);
+      color: var(--text);
+      box-shadow: 0 22px 70px rgba(0,0,0,0.65);
+    }
+    dialog::backdrop { background: rgba(3, 7, 18, 0.78); }
+    .password-dialog-form { display: grid; gap: 14px; }
+    .password-dialog-form input {
+      width: 100%;
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
     .btn-success {
       background: var(--green);
       border-color: var(--green);
@@ -638,33 +670,34 @@
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">Automation Thresholds &amp; Parameters</div>
+            <div class="card-title">Sensors Setting</div>
             <div class="card-subtitle">Tapo B is lit only while TV power is active and camera lux is inside the selected 0–X range</div>
           </div>
+          <button class="btn-edit" id="settings-edit-button" onclick="toggleSettingsEditor()">EDIT</button>
         </div>
         <div class="config-grid">
           <div class="field tv-on-slider">
             <label>TV On Range <span class="range-value" id="cfg-on-watts-value">40–120 W</span></label>
             <div class="tv-on-range-shell" id="tv-on-range-shell">
               <div class="tv-on-range-fill"></div>
-              <input type="range" min="0" max="3" step="1" id="cfg-on-min" value="1" oninput="syncTvOnRange('min')" aria-label="TV On Range minimum" />
-              <input type="range" min="0" max="3" step="1" id="cfg-on-max" value="3" oninput="syncTvOnRange('max')" aria-label="TV On Range maximum" />
+              <input type="range" min="0" max="3" step="1" id="cfg-on-min" value="1" oninput="syncTvOnRange('min')" aria-label="TV On Range minimum" disabled />
+              <input type="range" min="0" max="3" step="1" id="cfg-on-max" value="3" oninput="syncTvOnRange('max')" aria-label="TV On Range maximum" disabled />
             </div>
             <div class="range-scale" aria-hidden="true"><span>0</span><span>40</span><span>80</span><span>120</span></div>
           </div>
           <div class="field">
             <label>TV OFF Threshold <span class="range-value" id="cfg-off-watts-value">5.0 W</span></label>
-            <input type="range" min="0" max="50" step="0.5" id="cfg-off-watts" value="5.0" oninput="syncRangeLabels()" />
+            <input type="range" min="0" max="50" step="0.5" id="cfg-off-watts" value="5.0" oninput="syncRangeLabels()" disabled />
           </div>
           <div class="field lux-slider">
             <label>Light-On Range <span class="range-value" id="cfg-lux-value">60 lux</span></label>
             <div class="lux-range-shell">
-              <input type="range" min="0" max="4" step="1" id="cfg-lux" value="3" oninput="syncRangeLabels()" aria-label="Maximum Light-On Lux" />
+              <input type="range" min="0" max="4" step="1" id="cfg-lux" value="3" oninput="syncRangeLabels()" aria-label="Maximum Light-On Lux" disabled />
             </div>
             <div class="range-scale" aria-hidden="true"><span>0</span><span>15</span><span>30</span><span>60</span><span>120</span></div>
           </div>
           <div>
-            <button class="btn-primary" style="width:100%;" onclick="saveThresholds()">Save Thresholds</button>
+            <button class="btn-primary" id="settings-save-button" style="width:100%;display:none;" onclick="saveThresholds()">Save Settings</button>
           </div>
         </div>
       </div>
@@ -717,10 +750,26 @@
 
   <div class="toast" id="toast"></div>
 
+  <dialog id="settings-password-dialog">
+    <form class="password-dialog-form" onsubmit="unlockSettings(event)">
+      <div>
+        <div class="card-title">Unlock Sensors Setting</div>
+        <div class="card-subtitle">Enter the password to adjust sensor thresholds.</div>
+      </div>
+      <input type="password" id="settings-password" inputmode="numeric" autocomplete="current-password" placeholder="Password" required />
+      <div class="dialog-actions">
+        <button type="button" onclick="closeSettingsPasswordDialog()">Cancel</button>
+        <button type="submit" class="btn-primary">Unlock</button>
+      </div>
+    </form>
+  </dialog>
+
   <script>
     let cachedSamples = [];
     let daylightLuxSamples = [];
     let taipeiDaylight = null;
+    let settingsToken = null;
+    let settingsEditing = false;
     let currentConfig = { on_threshold_watts: 40.0, on_max_watts: 120.0, off_threshold_watts: 5.0 };
     let configInitialized = false;
     const tvOnScale = [0, 40, 80, 120];
@@ -761,6 +810,56 @@
       el.textContent = msg;
       el.style.display = 'block';
       setTimeout(() => { el.style.display = 'none'; }, 3200);
+    }
+
+    function setSettingsEditing(enabled) {
+      settingsEditing = enabled;
+      ['cfg-on-min', 'cfg-on-max', 'cfg-off-watts', 'cfg-lux'].forEach(id => {
+        document.getElementById(id).disabled = !enabled;
+      });
+      document.getElementById('settings-save-button').style.display = enabled ? 'block' : 'none';
+      document.getElementById('settings-edit-button').textContent = enabled ? 'LOCK' : 'EDIT';
+    }
+
+    function toggleSettingsEditor() {
+      if (settingsEditing) {
+        settingsToken = null;
+        setSettingsEditing(false);
+        showToast('Sensors Setting locked');
+        return;
+      }
+      const dialog = document.getElementById('settings-password-dialog');
+      document.getElementById('settings-password').value = '';
+      dialog.showModal();
+      setTimeout(() => document.getElementById('settings-password').focus(), 50);
+    }
+
+    function closeSettingsPasswordDialog() {
+      document.getElementById('settings-password-dialog').close();
+    }
+
+    async function unlockSettings(event) {
+      event.preventDefault();
+      const passwordInput = document.getElementById('settings-password');
+      try {
+        const response = await fetch('/api/settings-auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: passwordInput.value })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          passwordInput.select();
+          showToast(data.error || 'Incorrect password');
+          return;
+        }
+        settingsToken = data.token;
+        closeSettingsPasswordDialog();
+        setSettingsEditing(true);
+        showToast('Sensors Setting unlocked');
+      } catch (error) {
+        showToast(`Unlock failed: ${error}`);
+      }
     }
 
     function syncRangeLabels() {
@@ -1069,15 +1168,21 @@
         };
         const res = await fetch('/api/config', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-Settings-Token': settingsToken || '' },
           body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (data.ok) {
-          showToast('Thresholds updated & saved');
+          showToast('Sensors Setting updated & saved');
+          settingsToken = null;
+          setSettingsEditing(false);
           await fetchStatus();
         } else {
           showToast('Error: ' + (data.error || 'Failed to update config'));
+          if (res.status === 401) {
+            settingsToken = null;
+            setSettingsEditing(false);
+          }
         }
       } catch (err) {
         showToast('Save error: ' + err);
