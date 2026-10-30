@@ -5,7 +5,7 @@ Zero-dependency local LAN smart home controller and real-time web console for TP
 * **TV Turned ON + room inside the Light-On Range** &rarr; **Tapo A** (`192.168.31.9`) detects current/wattage and **CCX** reads native camera Lux metadata &rarr; **Tapo B** (`192.168.31.136`) turns the bulb on.
 * **Above the Light-On Range or TV OFF** &rarr; **Tapo B turns OFF**. Camera Lux is evaluated continuously, so Tapo B may turn on again as soon as the room returns to the configured range while the TV remains active.
 * **Overview & Detail Dashboard**: The compact live-control Overview is served at `/`; diagnostics, manual controls, telemetry, and runtime parameters are available at `/detail`.
-* **TV On History**: The Overview shows TV-on time, TV-off time, and duration for each viewing session. Detailed device operations remain in SQLite for future queries but are not rendered in the UI.
+* **TV-On History**: The Overview immediately shows an open `ON NOW` row whenever Tapo A confirms that the TV is ACTIVE, then records TV-off time and final duration when it leaves the On Range. This history is independent of Tapo B availability. Detailed device operations remain in SQLite for future queries but are not rendered in the UI.
 
 ---
 

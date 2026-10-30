@@ -1037,10 +1037,53 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
         try:
             with runtime.lock:
                 runtime.state_a = runtime.poll_unit(runtime.client_a, runtime.cfg["tapo_a_tv_sensor"], "Tapo A")
-                runtime.state_b = runtime.poll_unit(runtime.client_b, runtime.cfg["tapo_b_bulb_switch"], "Tapo B")
                 runtime.last_updated = _now_str()
-
                 watts_a = runtime.state_a["watts"]
+
+                # TV-On History is driven only by Tapo A. Record the TV state
+                # before polling Tapo B so a slow/offline bulb plug cannot block
+                # opening or closing the viewing session.
+                power_state = classify_tv_power(watts_a, on_watts, on_max_watts, off_watts)
+                if power_state == "on":
+                    runtime.high_streak += 1
+                    runtime.low_streak = 0
+                elif power_state == "off":
+                    runtime.low_streak += 1
+                    runtime.high_streak = 0
+                else:
+                    runtime.high_streak = 0
+                    runtime.low_streak = 0
+
+                if runtime.high_streak == debounce_n and prev_a_active is not True:
+                    prev_a_active = True
+                    runtime.history.start_tv_session()
+                    runtime.history.record_operation(
+                        "TAPO_A",
+                        "STATE_CHANGE",
+                        f"Tapo A TV Active Power Detected ({watts_a:.2f}W)",
+                        f"TV power entered the On Range at {watts_a:.2f}W ({runtime.state_a['mw']} mW), "
+                        f"inside {on_watts:.1f}-{on_max_watts:.1f}W for {debounce_n} consecutive readings",
+                        runtime.state_a,
+                        runtime.state_b,
+                        runtime.state_a["latency_ms"],
+                    )
+                elif runtime.low_streak == debounce_n and prev_a_active is not False:
+                    runtime.history.end_tv_session()
+                    if prev_a_active is True:
+                        runtime.history.record_operation(
+                            "TAPO_A",
+                            "STATE_CHANGE",
+                            f"Tapo A TV Standby/Off Detected ({watts_a:.2f}W)",
+                            f"TV power left the On Range at {watts_a:.2f}W ({runtime.state_a['mw']} mW); "
+                            f"On Range is {on_watts:.1f}-{on_max_watts:.1f}W and OFF cutoff is <= {off_watts:.1f}W, "
+                            f"for {debounce_n} consecutive readings",
+                            runtime.state_a,
+                            runtime.state_b,
+                            runtime.state_a["latency_ms"],
+                        )
+                    prev_a_active = False
+
+                runtime.state_b = runtime.poll_unit(runtime.client_b, runtime.cfg["tapo_b_bulb_switch"], "Tapo B")
                 bulb_is_on = runtime.state_b["relay_on"]
                 light_lux = (
                     float(runtime.camera_light["value"])
@@ -1089,18 +1132,6 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                         lat,
                     )
 
-                # Track streaks & log significant TV power state transitions on Tapo A
-                power_state = classify_tv_power(watts_a, on_watts, on_max_watts, off_watts)
-                if power_state == "on":
-                    runtime.high_streak += 1
-                    runtime.low_streak = 0
-                elif power_state == "off":
-                    runtime.low_streak += 1
-                    runtime.high_streak = 0
-                else:
-                    runtime.high_streak = 0
-                    runtime.low_streak = 0
-
                 if light_lux is None:
                     runtime.dark_streak = 0
                     runtime.bright_streak = 0
@@ -1110,35 +1141,6 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                 else:
                     runtime.bright_streak += 1
                     runtime.dark_streak = 0
-
-                if runtime.high_streak == debounce_n and prev_a_active is not True:
-                    prev_a_active = True
-                    runtime.history.start_tv_session()
-                    runtime.history.record_operation(
-                        "TAPO_A",
-                        "STATE_CHANGE",
-                        f"Tapo A TV Active Power Detected ({watts_a:.2f}W)",
-                        f"TV power entered the On Range at {watts_a:.2f}W ({runtime.state_a['mw']} mW), "
-                        f"inside {on_watts:.1f}-{on_max_watts:.1f}W for {debounce_n} consecutive readings",
-                        runtime.state_a,
-                        runtime.state_b,
-                        runtime.state_a["latency_ms"],
-                    )
-                elif runtime.low_streak == debounce_n and prev_a_active is not False:
-                    runtime.history.end_tv_session()
-                    if prev_a_active is True:
-                        runtime.history.record_operation(
-                            "TAPO_A",
-                            "STATE_CHANGE",
-                            f"Tapo A TV Standby/Off Detected ({watts_a:.2f}W)",
-                            f"TV power left the On Range at {watts_a:.2f}W ({runtime.state_a['mw']} mW); "
-                            f"On Range is {on_watts:.1f}-{on_max_watts:.1f}W and OFF cutoff is <= {off_watts:.1f}W, "
-                            f"for {debounce_n} consecutive readings",
-                            runtime.state_a,
-                            runtime.state_b,
-                            runtime.state_a["latency_ms"],
-                        )
-                    prev_a_active = False
 
                 # Keep Tapo B lit only while TV is active and lux is inside the 0-X range.
                 bulb_action = decide_automatic_bulb_action(
