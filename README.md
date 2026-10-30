@@ -25,6 +25,7 @@ Zero-dependency local LAN smart home controller and real-time web console for TP
 The `tvlighton.service` daemon runs both the `1.5s` KLAP v2 monitoring loop and a threaded HTTP web server on `0.0.0.0:8010`:
 
 * **Live Tapo A & Tapo B Telemetry Cards**: Real-time wattage (`W` & `mW`), relay status (`ON`/`OFF`), today's energy (`Wh`) and runtime (`mins`), Wi-Fi RSSI (`dBm`), and KLAP v2 round-trip latency (`ms`).
+  * The full Tapo A card is colored blue while the TV state is ACTIVE; the full Tapo B card is colored amber while the bulb relay is ON.
 * **Real-Time Power Telemetry Chart**: Live canvas plot of Tapo A (TV Watts) and Tapo B (Bulb Watts) against configurable ON/OFF thresholds.
 * **CCX Camera Light**: Native IMX290 Lux, exposure, and gain telemetry. The orange **Light-On Range** slider controls the maximum Lux at which the bulb may be lit.
 * **Slider Controls**: The dual-handle TV On Range uses `0 / 40 / 80 / 120 W`, with the active interval colored between its circular endpoints. TV OFF remains separately adjustable, and the Light-On Range uses `0 / 15 / 30 / 60 / 120 lux`. Selections are saved to `config.json`.

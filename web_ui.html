@@ -123,6 +123,27 @@
       border-radius: 14px;
       padding: 20px;
     }
+    .device-card {
+      transition: background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+    }
+    .device-card.tv-active {
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.34), rgba(30, 64, 175, 0.15));
+      border-color: rgba(96, 165, 250, 0.9);
+      box-shadow: 0 0 26px rgba(59, 130, 246, 0.22), inset 0 0 28px rgba(59, 130, 246, 0.08);
+    }
+    .device-card.bulb-active {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.36), rgba(180, 83, 9, 0.16));
+      border-color: rgba(251, 191, 36, 0.92);
+      box-shadow: 0 0 28px rgba(245, 158, 11, 0.24), inset 0 0 28px rgba(245, 158, 11, 0.09);
+    }
+    .device-card.tv-active .metric-box {
+      background: rgba(17, 24, 39, 0.58);
+      border-color: rgba(96, 165, 250, 0.38);
+    }
+    .device-card.bulb-active .metric-box {
+      background: rgba(17, 24, 39, 0.58);
+      border-color: rgba(251, 191, 36, 0.4);
+    }
     .card-header {
       display: flex;
       justify-content: space-between;
@@ -617,7 +638,7 @@
     <!-- Tapo A and Tapo B Live Cards -->
     <div class="grid-2">
       <!-- Tapo A Card -->
-      <div class="card">
+      <div class="card device-card" id="tapo-a-panel">
         <div class="card-header">
           <div>
             <span class="badge badge-a">TAPO A &bull; TV SENSOR</span>
@@ -641,7 +662,7 @@
       </div>
 
       <!-- Tapo B Card -->
-      <div class="card">
+      <div class="card device-card" id="tapo-b-panel">
         <div class="card-header">
           <div>
             <span class="badge badge-b">TAPO B &bull; BULB SWITCH</span>
@@ -921,6 +942,7 @@
         document.getElementById('a-mw').textContent = (a.mw !== undefined ? a.mw : '--') + ' mW';
         const tvWatts = a.watts || 0;
         const tvActive = tvWatts >= (cfg.on_threshold_watts ?? 40) && tvWatts <= (cfg.on_max_watts ?? 120);
+        document.getElementById('tapo-a-panel').classList.toggle('tv-active', tvActive);
         document.getElementById('a-tv-state').textContent = tvActive ? 'TV ACTIVE' : 'STANDBY / OFF';
         document.getElementById('a-tv-state').style.color = tvActive ? 'var(--green)' : 'var(--muted)';
         document.getElementById('a-streak').textContent = `High: ${data.high_streak || 0} | Low: ${data.low_streak || 0}`;
@@ -933,6 +955,7 @@
         bRelay.className = 'badge ' + (b.relay_on ? 'badge-on' : 'badge-off');
         document.getElementById('b-watts').textContent = (b.watts !== undefined ? b.watts.toFixed(2) : '--') + ' W';
         document.getElementById('b-mw').textContent = (b.mw !== undefined ? b.mw : '--') + ' mW';
+        document.getElementById('tapo-b-panel').classList.toggle('bulb-active', Boolean(b.relay_on));
         document.getElementById('b-bulb-state').textContent = b.relay_on ? 'BULB LIT' : 'BULB OFF';
         document.getElementById('b-bulb-state').style.color = b.relay_on ? 'var(--amber)' : 'var(--muted)';
 
