@@ -30,6 +30,7 @@ DETAIL_UI_PATH = APP_DIR / "detail.html"
 DEFAULT_WEB_PORT = int(os.environ.get("TVLIGHTON_PORT", "8010"))
 DEFAULT_CAMERA_STATE_URL = "http://127.0.0.1:8080/state"
 DEFAULT_CAMERA_SAMPLE_INTERVAL = 5.0
+LUX_HISTORY_INTERVAL_SECONDS = 15 * 60
 
 
 def _now_str() -> str:
@@ -38,6 +39,12 @@ def _now_str() -> str:
 
 def _log(msg: str) -> None:
     print(f"[{_now_str()}] {msg}", flush=True)
+
+
+def next_lux_sample_epoch(now_epoch: Optional[float] = None) -> float:
+    """Return the next quarter-hour boundary after now."""
+    now = time.time() if now_epoch is None else float(now_epoch)
+    return float((int(now) // LUX_HISTORY_INTERVAL_SECONDS + 1) * LUX_HISTORY_INTERVAL_SECONDS)
 
 
 def _decode_nickname(raw_nickname: Optional[str], fallback: str) -> str:
@@ -172,6 +179,24 @@ class HistoryStore:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_tv_sessions_start ON tv_sessions(started_epoch DESC)"
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS lux_samples (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sampled_at TEXT NOT NULL,
+                    sampled_epoch REAL NOT NULL,
+                    lux REAL NOT NULL,
+                    exposure_time_us REAL,
+                    analogue_gain REAL,
+                    digital_gain REAL,
+                    colour_temperature_k REAL,
+                    source TEXT NOT NULL DEFAULT 'IMX290 CSI'
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_lux_samples_time ON lux_samples(sampled_epoch DESC)"
             )
 
             # Seed initial historical operations from earlier today if table is empty
@@ -338,6 +363,45 @@ class HistoryStore:
                 item["duration_seconds"] = max(0, int(now - float(item["started_epoch"])))
             sessions.append(item)
         return sessions
+
+    def record_lux_sample(
+        self, light: Dict[str, Any], sampled_epoch: Optional[float] = None
+    ) -> Optional[int]:
+        """Persist one valid camera Lux reading and its exposure metadata."""
+        if not light.get("online") or light.get("value") is None:
+            return None
+        epoch = time.time() if sampled_epoch is None else float(sampled_epoch)
+        sampled_at = datetime.fromtimestamp(epoch).strftime("%Y-%m-%d %H:%M:%S")
+        with self._lock, self._connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO lux_samples (
+                    sampled_at, sampled_epoch, lux, exposure_time_us,
+                    analogue_gain, digital_gain, colour_temperature_k, source
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    sampled_at,
+                    epoch,
+                    float(light["value"]),
+                    light.get("exposure_time_us"),
+                    light.get("analogue_gain"),
+                    light.get("digital_gain"),
+                    light.get("colour_temperature_k"),
+                    str(light.get("source", "IMX290 CSI")),
+                ),
+            )
+            conn.commit()
+            return int(cursor.lastrowid)
+
+    def query_lux_samples(self, limit: int = 1000) -> List[Dict[str, Any]]:
+        """Return retained Lux readings, newest first."""
+        with self._lock, self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM lux_samples ORDER BY sampled_epoch DESC LIMIT ?",
+                (max(1, min(int(limit), 10000)),),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def record_operation(
         self,
@@ -671,6 +735,12 @@ def make_http_handler(runtime: TvLightOnRuntime):
                 self._send_json({"items": runtime.history.query_tv_sessions(limit=limit)})
                 return
 
+            if path == "/api/lux-history":
+                qs = urllib.parse.parse_qs(parsed.query)
+                limit = int(qs.get("limit", ["1000"])[0])
+                self._send_json({"items": runtime.history.query_lux_samples(limit=limit)})
+                return
+
             self._send_json({"error": "Not found"}, status=404)
 
         def do_POST(self) -> None:
@@ -772,8 +842,17 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
     _log(f"Web UI & REST API listening on http://0.0.0.0:{web_port}")
 
     def camera_light_loop() -> None:
+        next_history_sample = 0.0
         while True:
             runtime.update_camera_light()
+            now_epoch = time.time()
+            if now_epoch >= next_history_sample and runtime.camera_light.get("online"):
+                sample_id = runtime.history.record_lux_sample(runtime.camera_light, now_epoch)
+                if sample_id is not None:
+                    _log(
+                        f"Saved Lux sample #{sample_id}: {runtime.camera_light['value']:.1f} lux"
+                    )
+                    next_history_sample = next_lux_sample_epoch(now_epoch)
             time.sleep(runtime.camera_sample_interval)
 
     threading.Thread(target=camera_light_loop, daemon=True).start()

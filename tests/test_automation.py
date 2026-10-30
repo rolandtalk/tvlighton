@@ -61,6 +61,30 @@ class AutomationDecisionTest(unittest.TestCase):
             self.assertEqual(completed["duration_seconds"], 125)
             self.assertIsNone(store.end_tv_session(ended_epoch=1300))
 
+    def test_lux_history_records_camera_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            store = tvlighton.HistoryStore(Path(tmp_dir) / "lux.db")
+            light = {
+                "online": True,
+                "value": 42.5,
+                "source": "IMX290 CSI",
+                "exposure_time_us": 1234,
+                "analogue_gain": 2.0,
+                "digital_gain": 1.0,
+                "colour_temperature_k": 4200,
+            }
+            sample_id = store.record_lux_sample(light, sampled_epoch=900)
+            self.assertIsNotNone(sample_id)
+            sample = store.query_lux_samples()[0]
+            self.assertEqual(sample["lux"], 42.5)
+            self.assertEqual(sample["exposure_time_us"], 1234)
+            self.assertEqual(sample["sampled_epoch"], 900)
+
+    def test_next_lux_sample_is_next_quarter_hour(self):
+        self.assertEqual(tvlighton.next_lux_sample_epoch(1), 900)
+        self.assertEqual(tvlighton.next_lux_sample_epoch(899), 900)
+        self.assertEqual(tvlighton.next_lux_sample_epoch(900), 1800)
+
 
 if __name__ == "__main__":
     unittest.main()
