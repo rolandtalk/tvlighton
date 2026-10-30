@@ -31,6 +31,11 @@ DEFAULT_WEB_PORT = int(os.environ.get("TVLIGHTON_PORT", "8010"))
 DEFAULT_CAMERA_STATE_URL = "http://127.0.0.1:8080/state"
 DEFAULT_CAMERA_SAMPLE_INTERVAL = 5.0
 LUX_HISTORY_INTERVAL_SECONDS = 15 * 60
+TAIPEI_LATITUDE = 25.0330
+TAIPEI_LONGITUDE = 121.5654
+DAYLIGHT_CACHE_SECONDS = 6 * 60 * 60
+_daylight_cache: Dict[str, Any] = {}
+_daylight_cache_lock = threading.Lock()
 
 
 def _now_str() -> str:
@@ -45,6 +50,64 @@ def next_lux_sample_epoch(now_epoch: Optional[float] = None) -> float:
     """Return the next quarter-hour boundary after now."""
     now = time.time() if now_epoch is None else float(now_epoch)
     return float((int(now) // LUX_HISTORY_INTERVAL_SECONDS + 1) * LUX_HISTORY_INTERVAL_SECONDS)
+
+
+def parse_daylight_payload(payload: Dict[str, Any], requested_date: str) -> Dict[str, Any]:
+    """Extract Taipei sunrise and sunset ISO timestamps from Open-Meteo."""
+    daily = payload.get("daily", {})
+    dates = daily.get("time", [])
+    try:
+        index = dates.index(requested_date)
+        sunrise = str(daily["sunrise"][index])
+        sunset = str(daily["sunset"][index])
+    except (KeyError, ValueError, IndexError, TypeError) as err:
+        raise RuntimeError("Internet daylight response did not contain Taipei sunrise/sunset") from err
+    return {
+        "date": requested_date,
+        "sunrise": sunrise,
+        "sunset": sunset,
+        "sunrise_time": sunrise[11:16],
+        "sunset_time": sunset[11:16],
+        "timezone": "Asia/Taipei",
+        "latitude": TAIPEI_LATITUDE,
+        "longitude": TAIPEI_LONGITUDE,
+        "source": "Open-Meteo",
+    }
+
+
+def fetch_taipei_daylight() -> Dict[str, Any]:
+    """Fetch and cache today's internet-sourced Taipei sunrise/sunset times."""
+    requested_date = datetime.now().strftime("%Y-%m-%d")
+    now_epoch = time.time()
+    with _daylight_cache_lock:
+        if (
+            _daylight_cache.get("date") == requested_date
+            and now_epoch - float(_daylight_cache.get("fetched_epoch", 0)) < DAYLIGHT_CACHE_SECONDS
+        ):
+            return dict(_daylight_cache["data"])
+
+    query = urllib.parse.urlencode(
+        {
+            "latitude": TAIPEI_LATITUDE,
+            "longitude": TAIPEI_LONGITUDE,
+            "daily": "sunrise,sunset",
+            "timezone": "Asia/Taipei",
+            "start_date": requested_date,
+            "end_date": requested_date,
+        }
+    )
+    request = urllib.request.Request(
+        f"https://api.open-meteo.com/v1/forecast?{query}",
+        headers={"User-Agent": "tvlighton/1.0"},
+    )
+    with urllib.request.urlopen(request, timeout=10) as response:
+        data = parse_daylight_payload(json.load(response), requested_date)
+    with _daylight_cache_lock:
+        _daylight_cache.clear()
+        _daylight_cache.update(
+            {"date": requested_date, "fetched_epoch": now_epoch, "data": data}
+        )
+    return dict(data)
 
 
 def _decode_nickname(raw_nickname: Optional[str], fallback: str) -> str:
@@ -739,6 +802,13 @@ def make_http_handler(runtime: TvLightOnRuntime):
                 qs = urllib.parse.parse_qs(parsed.query)
                 limit = int(qs.get("limit", ["1000"])[0])
                 self._send_json({"items": runtime.history.query_lux_samples(limit=limit)})
+                return
+
+            if path == "/api/daylight":
+                try:
+                    self._send_json(fetch_taipei_daylight())
+                except Exception as err:
+                    self._send_json({"error": str(err)}, status=503)
                 return
 
             self._send_json({"error": "Not found"}, status=404)

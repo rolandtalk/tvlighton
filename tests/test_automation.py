@@ -85,6 +85,19 @@ class AutomationDecisionTest(unittest.TestCase):
         self.assertEqual(tvlighton.next_lux_sample_epoch(899), 900)
         self.assertEqual(tvlighton.next_lux_sample_epoch(900), 1800)
 
+    def test_parses_internet_daylight_times(self):
+        payload = {
+            "daily": {
+                "time": ["2026-10-30"],
+                "sunrise": ["2026-10-30T05:59"],
+                "sunset": ["2026-10-30T17:14"],
+            }
+        }
+        daylight = tvlighton.parse_daylight_payload(payload, "2026-10-30")
+        self.assertEqual(daylight["sunrise_time"], "05:59")
+        self.assertEqual(daylight["sunset_time"], "17:14")
+        self.assertEqual(daylight["source"], "Open-Meteo")
+
 
 if __name__ == "__main__":
     unittest.main()

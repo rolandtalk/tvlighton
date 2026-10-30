@@ -700,7 +700,7 @@
       <div class="controls-bar">
         <div>
           <div class="card-title">Daylight Lux Curve</div>
-          <div class="card-subtitle" id="lux-chart-subtitle">Today · first record is Sunrise, last record is Sunset</div>
+          <div class="card-subtitle" id="lux-chart-subtitle">Loading Taipei sunrise and sunset times…</div>
         </div>
         <span class="badge badge-b" id="lux-chart-count">0 READINGS</span>
       </div>
@@ -720,6 +720,7 @@
   <script>
     let cachedSamples = [];
     let daylightLuxSamples = [];
+    let taipeiDaylight = null;
     let currentConfig = { on_threshold_watts: 40.0, on_max_watts: 120.0, off_threshold_watts: 5.0 };
     let configInitialized = false;
     const tvOnScale = [0, 40, 80, 120];
@@ -897,15 +898,36 @@
         const response = await fetch('/api/lux-history?limit=1000');
         const data = await response.json();
         const allSamples = (data.items || []).slice().sort((a, b) => a.sampled_epoch - b.sampled_epoch);
-        const today = new Date().toLocaleDateString('en-CA');
+        const today = taipeiDaylight?.date || new Date().toLocaleDateString('en-CA');
         const todaySamples = allSamples.filter(sample => String(sample.sampled_at || '').startsWith(today));
-        daylightLuxSamples = todaySamples.length ? todaySamples : allSamples.filter(sample =>
-          String(sample.sampled_at || '').startsWith(String(allSamples.at(-1)?.sampled_at || '').slice(0, 10))
-        );
+        if (taipeiDaylight) {
+          const sunriseEpoch = Date.parse(`${taipeiDaylight.sunrise}:00+08:00`) / 1000;
+          const sunsetEpoch = Date.parse(`${taipeiDaylight.sunset}:00+08:00`) / 1000;
+          daylightLuxSamples = todaySamples.filter(sample =>
+            Number(sample.sampled_epoch) >= sunriseEpoch && Number(sample.sampled_epoch) <= sunsetEpoch
+          );
+        } else {
+          daylightLuxSamples = todaySamples;
+        }
         drawLuxHistoryChart();
       } catch (error) {
         console.error('Lux history fetch error:', error);
         document.getElementById('lux-chart-subtitle').textContent = 'Unable to load retained Lux readings';
+      }
+    }
+
+    async function loadTaipeiDaylight() {
+      try {
+        const response = await fetch('/api/daylight');
+        if (!response.ok) throw new Error(`Daylight API returned ${response.status}`);
+        taipeiDaylight = await response.json();
+        await loadLuxHistory();
+      } catch (error) {
+        console.error('Daylight fetch error:', error);
+        taipeiDaylight = null;
+        document.getElementById('lux-chart-subtitle').textContent =
+          'Taipei sunrise/sunset internet source is temporarily unavailable';
+        await loadLuxHistory();
       }
     }
 
@@ -939,7 +961,10 @@
       const padL = 46, padR = 18, padT = 18, padB = 34;
       const plotW = Math.max(1, W - padL - padR);
       const plotH = Math.max(1, H - padT - padB);
-      const xOf = index => padL + (samples.length === 1 ? plotW / 2 : index / (samples.length - 1) * plotW);
+      const sunriseEpoch = taipeiDaylight ? Date.parse(`${taipeiDaylight.sunrise}:00+08:00`) / 1000 : Number(samples[0].sampled_epoch);
+      const sunsetEpoch = taipeiDaylight ? Date.parse(`${taipeiDaylight.sunset}:00+08:00`) / 1000 : Number(samples[samples.length - 1].sampled_epoch);
+      const daylightSeconds = Math.max(1, sunsetEpoch - sunriseEpoch);
+      const xOfEpoch = epoch => padL + Math.max(0, Math.min(1, (Number(epoch) - sunriseEpoch) / daylightSeconds)) * plotW;
       const yOf = lux => padT + plotH - Math.min(lux, maxLux) / maxLux * plotH;
 
       ctx.font = '10px sans-serif';
@@ -956,23 +981,34 @@
         ctx.fillText(`${Math.round(value)} lx`, 4, y + 3);
       });
 
+      // Internet-sourced sunrise and sunset boundaries for Taipei.
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.65)';
+      [padL, W - padR].forEach(x => {
+        ctx.beginPath();
+        ctx.moveTo(x, padT);
+        ctx.lineTo(x, padT + plotH);
+        ctx.stroke();
+      });
+      ctx.setLineDash([]);
+
       const area = ctx.createLinearGradient(0, padT, 0, padT + plotH);
       area.addColorStop(0, 'rgba(245, 158, 11, 0.38)');
       area.addColorStop(1, 'rgba(245, 158, 11, 0.02)');
       ctx.beginPath();
       samples.forEach((sample, index) => {
-        const x = xOf(index), y = yOf(Number(sample.lux) || 0);
+        const x = xOfEpoch(sample.sampled_epoch), y = yOf(Number(sample.lux) || 0);
         if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       });
-      ctx.lineTo(xOf(samples.length - 1), padT + plotH);
-      ctx.lineTo(xOf(0), padT + plotH);
+      ctx.lineTo(xOfEpoch(samples[samples.length - 1].sampled_epoch), padT + plotH);
+      ctx.lineTo(xOfEpoch(samples[0].sampled_epoch), padT + plotH);
       ctx.closePath();
       ctx.fillStyle = area;
       ctx.fill();
 
       ctx.beginPath();
       samples.forEach((sample, index) => {
-        const x = xOf(index), y = yOf(Number(sample.lux) || 0);
+        const x = xOfEpoch(sample.sampled_epoch), y = yOf(Number(sample.lux) || 0);
         if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       });
       ctx.strokeStyle = '#f59e0b';
@@ -981,27 +1017,27 @@
       ctx.stroke();
 
       samples.forEach((sample, index) => {
-        const x = xOf(index), y = yOf(Number(sample.lux) || 0);
+        const x = xOfEpoch(sample.sampled_epoch), y = yOf(Number(sample.lux) || 0);
         ctx.beginPath();
-        ctx.arc(x, y, index === 0 || index === samples.length - 1 ? 4.5 : 2.5, 0, Math.PI * 2);
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
         ctx.fillStyle = '#fbbf24';
         ctx.fill();
       });
 
-      const first = samples[0], last = samples[samples.length - 1];
-      const firstTime = luxSampleTime(first), lastTime = luxSampleTime(last);
-      document.getElementById('lux-sunrise-time').textContent = firstTime;
-      document.getElementById('lux-sunset-time').textContent = lastTime;
+      const sunriseTime = taipeiDaylight?.sunrise_time || luxSampleTime(samples[0]);
+      const sunsetTime = taipeiDaylight?.sunset_time || luxSampleTime(samples[samples.length - 1]);
+      document.getElementById('lux-sunrise-time').textContent = sunriseTime;
+      document.getElementById('lux-sunset-time').textContent = sunsetTime;
       document.getElementById('lux-chart-range').textContent = `${minLux.toFixed(1)}–${Math.max(...values).toFixed(1)} lux`;
       document.getElementById('lux-chart-subtitle').textContent =
-        `${String(first.sampled_at).slice(0, 10)} · Sunrise ${firstTime} → Sunset ${lastTime}`;
+        `${taipeiDaylight?.date || String(samples[0].sampled_at).slice(0, 10)} · Taipei · Open-Meteo internet time`;
 
       ctx.fillStyle = '#9ca3af';
       ctx.font = '10px sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillText('Sunrise', padL, H - 8);
+      ctx.fillText(`Sunrise ${sunriseTime}`, padL, H - 8);
       ctx.textAlign = 'right';
-      ctx.fillText('Sunset', W - padR, H - 8);
+      ctx.fillText(`Sunset ${sunsetTime}`, W - padR, H - 8);
     }
 
     async function controlDevice(target, turnOn) {
@@ -1128,13 +1164,14 @@
     function initialLoad() {
       fetchStatus();
       loadTvSessions();
-      loadLuxHistory();
+      loadTaipeiDaylight();
     }
 
     initialLoad();
     setInterval(fetchStatus, 2000);
     setInterval(loadTvSessions, 5000);
     setInterval(loadLuxHistory, 60000);
+    setInterval(loadTaipeiDaylight, 6 * 60 * 60 * 1000);
     window.addEventListener('resize', () => {
       drawChart();
       drawLuxHistoryChart();

@@ -39,6 +39,7 @@ The `tvlighton.service` daemon runs both the `1.5s` KLAP v2 monitoring loop and 
 * `GET /detail` — Diagnostics, energy/RSSI, manual controls, power chart, poll interval, and debounce settings (`detail.html`)
 * `GET /api/status` — Live status of Tapo A, Tapo B, camera Lux, thresholds, debounce streaks, and chart telemetry
 * `GET /api/lux-history?limit=1000` — Persisted camera Lux samples, recorded immediately at service start and every 15 minutes on quarter-hour boundaries
+* `GET /api/daylight` — Internet-sourced Taipei sunrise and sunset times from Open-Meteo, cached for six hours
 * `GET /api/history?limit=200&device=TAPO_B&event_type=AUTO_TRIGGER_ON` — Detailed operation history from SQLite
 * `GET /api/tv-sessions?limit=100` — TV viewing sessions with start, end, active status, and duration
 * `POST /api/control` — Manual switch (`{"target": "tapo_b", "state": true}`)
