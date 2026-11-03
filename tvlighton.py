@@ -807,24 +807,23 @@ def make_http_handler(runtime: TvLightOnRuntime):
 
             if path in ("/favicon.svg", "/favicon.ico"):
                 svg_bytes = (
-                    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
-                    b'<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
-                    b'<stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#10b981"/>'
-                    b'</linearGradient></defs>'
-                    b'<line x1="18" y1="6" x2="30" y2="19" stroke="#fbbf24" stroke-width="3.5" stroke-linecap="round"/>'
-                    b'<line x1="46" y1="6" x2="34" y2="19" stroke="#fbbf24" stroke-width="3.5" stroke-linecap="round"/>'
-                    b'<circle cx="18" cy="6" r="3" fill="#fbbf24"/><circle cx="46" cy="6" r="3" fill="#fbbf24"/>'
-                    b'<rect x="6" y="18" width="52" height="38" rx="8" fill="#1e293b" stroke="#f59e0b" stroke-width="3"/>'
-                    b'<rect x="12" y="24" width="32" height="26" rx="4" fill="url(#g)"/>'
-                    b'<circle cx="50" cy="31" r="2.6" fill="#fbbf24"/><circle cx="50" cy="41" r="2.6" fill="#fbbf24"/>'
-                    b'<line x1="18" y1="56" x2="14" y2="61" stroke="#f59e0b" stroke-width="3.5" stroke-linecap="round"/>'
-                    b'<line x1="46" y1="56" x2="50" y2="61" stroke="#f59e0b" stroke-width="3.5" stroke-linecap="round"/>'
+                    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">'
+                    b'<line x1="18" y1="6" x2="30" y2="19" stroke="#ef4444" stroke-width="3.5" stroke-linecap="round"/>'
+                    b'<line x1="46" y1="6" x2="34" y2="19" stroke="#ef4444" stroke-width="3.5" stroke-linecap="round"/>'
+                    b'<circle cx="18" cy="6" r="3" fill="#000000" stroke="#ef4444" stroke-width="2.5"/>'
+                    b'<circle cx="46" cy="6" r="3" fill="#000000" stroke="#ef4444" stroke-width="2.5"/>'
+                    b'<rect x="6" y="18" width="52" height="38" rx="8" fill="#000000" stroke="#ef4444" stroke-width="3.5"/>'
+                    b'<rect x="12" y="24" width="32" height="26" rx="4" fill="#000000" stroke="#ef4444" stroke-width="2.8"/>'
+                    b'<circle cx="50" cy="31" r="3" fill="#000000" stroke="#ef4444" stroke-width="2.4"/>'
+                    b'<circle cx="50" cy="42" r="3" fill="#000000" stroke="#ef4444" stroke-width="2.4"/>'
+                    b'<line x1="18" y1="56" x2="14" y2="61" stroke="#ef4444" stroke-width="3.5" stroke-linecap="round"/>'
+                    b'<line x1="46" y1="56" x2="50" y2="61" stroke="#ef4444" stroke-width="3.5" stroke-linecap="round"/>'
                     b'</svg>'
                 )
                 self.send_response(200)
                 self.send_header("Content-Type", "image/svg+xml; charset=utf-8")
                 self.send_header("Content-Length", str(len(svg_bytes)))
-                self.send_header("Cache-Control", "public, max-age=86400")
+                self.send_header("Cache-Control", "no-cache")
                 self.end_headers()
                 self.wfile.write(svg_bytes)
                 return
