@@ -705,7 +705,7 @@
           </div>
           <div class="metric-box">
             <div class="metric-label">TV State</div>
-            <div class="metric-val" id="a-tv-state">--</div>
+            <div class="metric-val" id="a-tv-state" style="white-space:pre-line;line-height:1.25;">--</div>
             <div class="metric-sub" id="a-streak">Streak: 0</div>
           </div>
         </div>
@@ -1003,7 +1003,7 @@
         const tvWatts = a.watts || 0;
         const tvActive = tvWatts >= (cfg.on_threshold_watts ?? 40) && tvWatts <= (cfg.on_max_watts ?? 120);
         document.getElementById('tapo-a-panel').classList.toggle('tv-active', tvActive);
-        document.getElementById('a-tv-state').textContent = tvActive ? 'TV ACTIVE · 老媽電視中' : 'STANDBY / OFF';
+        document.getElementById('a-tv-state').textContent = tvActive ? 'TV ACTIVE\n老媽電視中' : 'STANDBY / OFF';
         document.getElementById('a-tv-state').style.color = tvActive ? 'var(--green)' : 'var(--muted)';
         document.getElementById('a-streak').textContent = `High: ${data.high_streak || 0} | Low: ${data.low_streak || 0}`;
 
