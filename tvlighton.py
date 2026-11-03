@@ -829,6 +829,27 @@ def make_http_handler(runtime: TvLightOnRuntime):
                 self.wfile.write(svg_bytes)
                 return
 
+            if path == "/manifest.webmanifest":
+                self._send_json(
+                    {
+                        "name": "Mom on TV",
+                        "short_name": "Mom on TV",
+                        "start_url": "/",
+                        "display": "standalone",
+                        "background_color": "#0b0f19",
+                        "theme_color": "#111827",
+                        "icons": [
+                            {
+                                "src": "/favicon.svg",
+                                "sizes": "any",
+                                "type": "image/svg+xml",
+                                "purpose": "any",
+                            }
+                        ],
+                    }
+                )
+                return
+
             if path in ("/detail", "/detail.html"):
                 html_bytes = DETAIL_UI_PATH.read_bytes()
                 self.send_response(200)
