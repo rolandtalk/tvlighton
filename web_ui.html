@@ -731,14 +731,15 @@
           <div class="card-title">TV-On History</div>
           <div class="card-subtitle">Every period when the TV state is ACTIVE, including the current session</div>
         </div>
+        <button class="btn-edit" id="tv-history-tz-button" onclick="toggleTvHistoryTimezone()">TW Time ⇄ LA Time (Showing: TW)</button>
       </div>
 
       <div class="table-container">
         <table class="tv-history-table">
           <thead>
             <tr>
-              <th>TV On</th>
-              <th>TV Off</th>
+              <th id="th-tv-on">TV On (TW Time)</th>
+              <th id="th-tv-off">TV Off (TW Time)</th>
               <th>Duration</th>
             </tr>
           </thead>
@@ -943,7 +944,7 @@
         const tvWatts = a.watts || 0;
         const tvActive = tvWatts >= (cfg.on_threshold_watts ?? 40) && tvWatts <= (cfg.on_max_watts ?? 120);
         document.getElementById('tapo-a-panel').classList.toggle('tv-active', tvActive);
-        document.getElementById('a-tv-state').textContent = tvActive ? 'TV ACTIVE' : 'STANDBY / OFF';
+        document.getElementById('a-tv-state').textContent = tvActive ? 'TV ACTIVE · 老媽電視中' : 'STANDBY / OFF';
         document.getElementById('a-tv-state').style.color = tvActive ? 'var(--green)' : 'var(--muted)';
         document.getElementById('a-streak').textContent = `High: ${data.high_streak || 0} | Low: ${data.low_streak || 0}`;
 
@@ -979,13 +980,79 @@
       return `${minutes} min`;
     }
 
-    function formatTvOn(timestamp) {
-      return String(timestamp || '--').slice(0, 16);
+    let tvHistoryTimezone = 'TW'; // 'TW' (Asia/Taipei) or 'LA' (America/Los_Angeles)
+    let cachedTvSessions = [];
+
+    const tvFmtTW = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Asia/Taipei',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+      hour12: false
+    });
+    const tvFmtLA = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'America/Los_Angeles',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+      hour12: false
+    });
+
+    function parseSessionDate(timestamp, epoch) {
+      if (epoch !== null && epoch !== undefined && Number.isFinite(Number(epoch))) {
+        return new Date(Number(epoch) * 1000);
+      }
+      if (!timestamp) return null;
+      const iso = String(timestamp).trim().replace(' ', 'T') + '+08:00';
+      const d = new Date(iso);
+      return isNaN(d.getTime()) ? null : d;
     }
 
-    function formatTvOff(timestamp) {
-      const time = String(timestamp || '').split(' ')[1];
-      return time ? time.slice(0, 5) : '--';
+    function formatTvOn(timestamp, epoch) {
+      const d = parseSessionDate(timestamp, epoch);
+      if (!d) return String(timestamp || '--').slice(0, 16);
+      return (tvHistoryTimezone === 'LA' ? tvFmtLA : tvFmtTW).format(d);
+    }
+
+    function formatTvOff(timestamp, epoch) {
+      const d = parseSessionDate(timestamp, epoch);
+      if (!d) {
+        const time = String(timestamp || '').split(' ')[1];
+        return time ? time.slice(0, 5) : '--';
+      }
+      const formatted = (tvHistoryTimezone === 'LA' ? tvFmtLA : tvFmtTW).format(d);
+      return formatted.split(' ')[1] || '--';
+    }
+
+    function toggleTvHistoryTimezone() {
+      tvHistoryTimezone = tvHistoryTimezone === 'TW' ? 'LA' : 'TW';
+      const btn = document.getElementById('tv-history-tz-button');
+      const thOn = document.getElementById('th-tv-on');
+      const thOff = document.getElementById('th-tv-off');
+      if (tvHistoryTimezone === 'LA') {
+        btn.textContent = 'TW Time ⇄ LA Time (Showing: LA)';
+        thOn.textContent = 'TV On (LA Time)';
+        thOff.textContent = 'TV Off (LA Time)';
+      } else {
+        btn.textContent = 'TW Time ⇄ LA Time (Showing: TW)';
+        thOn.textContent = 'TV On (TW Time)';
+        thOff.textContent = 'TV Off (TW Time)';
+      }
+      renderTvSessions();
+      showToast(`TV-On History switched to ${tvHistoryTimezone === 'LA' ? 'LA Time' : 'TW Time'}`);
+    }
+
+    function renderTvSessions() {
+      const tbody = document.getElementById('tv-sessions-body');
+      if (!cachedTvSessions.length) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--muted);">No TV sessions recorded yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = cachedTvSessions.map(session => `
+        <tr>
+          <td class="mono">${formatTvOn(session.started_at, session.started_epoch)}</td>
+          <td class="mono">${session.active ? '<span style="color:var(--green);font-weight:700;">ON NOW</span>' : formatTvOff(session.ended_at, session.ended_epoch)}</td>
+          <td style="font-weight:700;">${formatDuration(session.duration_seconds)}</td>
+        </tr>
+      `).join('');
     }
 
     async function loadTvSessions() {
@@ -993,18 +1060,8 @@
       try {
         const response = await fetch('/api/tv-sessions?limit=1000');
         const data = await response.json();
-        const sessions = data.items || [];
-        if (!sessions.length) {
-          tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--muted);">No TV sessions recorded yet.</td></tr>';
-          return;
-        }
-        tbody.innerHTML = sessions.map(session => `
-          <tr>
-            <td class="mono">${formatTvOn(session.started_at)}</td>
-            <td class="mono">${session.active ? '<span style="color:var(--green);font-weight:700;">ON NOW</span>' : formatTvOff(session.ended_at)}</td>
-            <td style="font-weight:700;">${formatDuration(session.duration_seconds)}</td>
-          </tr>
-        `).join('');
+        cachedTvSessions = data.items || [];
+        renderTvSessions();
       } catch (error) {
         console.error('TV session fetch error:', error);
         tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--red);">Unable to load TV sessions.</td></tr>';
