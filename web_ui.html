@@ -1176,9 +1176,15 @@
       }
 
       const values = samples.map(sample => Number(sample.lux) || 0);
-      const maxLux = Math.max(10, Math.ceil(Math.max(...values) / 10) * 10);
+      const peakSample = samples.reduce(
+        (best, sample) => (Number(sample.lux) || 0) > (Number(best.lux) || 0) ? sample : best,
+        samples[0]
+      );
+      const peakLux = Number(peakSample.lux) || 0;
+      const peakTime = luxSampleTime(peakSample);
+      const maxLux = Math.max(10, Math.ceil(peakLux / 10) * 10);
       const minLux = Math.min(...values);
-      const padL = 46, padR = 18, padT = 18, padB = 34;
+      const padL = 46, padR = 18, padT = 28, padB = 34;
       const plotW = Math.max(1, W - padL - padR);
       const plotH = Math.max(1, H - padT - padB);
       const sunriseEpoch = taipeiDaylight ? Date.parse(`${taipeiDaylight.sunrise}:00+08:00`) / 1000 : Number(samples[0].sampled_epoch);
@@ -1244,11 +1250,49 @@
         ctx.fill();
       });
 
+      // Highlight daily peak reading and timestamp directly on the curve.
+      const peakX = xOfEpoch(peakSample.sampled_epoch);
+      const peakY = yOf(peakLux);
+      ctx.beginPath();
+      ctx.arc(peakX, peakY, 7, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.28)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(peakX, peakY, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#fde68a';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#f59e0b';
+      ctx.stroke();
+
+      const peakLabel = `Peak ${peakLux.toFixed(1)} lx @ ${peakTime}`;
+      ctx.font = 'bold 11px sans-serif';
+      const labelPadX = 7;
+      const boxW = ctx.measureText(peakLabel).width + labelPadX * 2;
+      const boxH = 20;
+      const boxX = Math.max(padL + 2, Math.min(W - padR - boxW - 2, peakX - boxW / 2));
+      const boxY = Math.max(4, peakY - boxH - 8);
+      ctx.fillStyle = 'rgba(17, 24, 39, 0.9)';
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.75)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(boxX, boxY, boxW, boxH, 6);
+      } else {
+        ctx.rect(boxX, boxY, boxW, boxH);
+      }
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#fef3c7';
+      ctx.textAlign = 'center';
+      ctx.fillText(peakLabel, boxX + boxW / 2, boxY + 14);
+
       const sunriseTime = taipeiDaylight?.sunrise_time || luxSampleTime(samples[0]);
       const sunsetTime = taipeiDaylight?.sunset_time || luxSampleTime(samples[samples.length - 1]);
       document.getElementById('lux-sunrise-time').textContent = sunriseTime;
       document.getElementById('lux-sunset-time').textContent = sunsetTime;
-      document.getElementById('lux-chart-range').textContent = `${minLux.toFixed(1)}–${Math.max(...values).toFixed(1)} lux`;
+      document.getElementById('lux-chart-range').textContent =
+        `${minLux.toFixed(1)}–${peakLux.toFixed(1)} lux · Peak ${peakLux.toFixed(1)} lx @ ${peakTime}`;
       document.getElementById('lux-chart-subtitle').textContent =
         `${taipeiDaylight?.date || String(samples[0].sampled_at).slice(0, 10)} · Taipei · Open-Meteo internet time`;
 
