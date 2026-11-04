@@ -439,6 +439,10 @@
     .tv-history-table th:nth-child(2) { width: 24%; }
     .tv-history-table th:nth-child(3) { width: 28%; }
     .tv-history-table td { white-space: nowrap; }
+    .tv-history-table tr.tv-day-even td { background: transparent; }
+    .tv-history-table tr.tv-day-odd td { background: rgba(59, 130, 246, 0.12); }
+    .tv-history-table tr.tv-day-even:hover td { background: rgba(255, 255, 255, 0.04); }
+    .tv-history-table tr.tv-day-odd:hover td { background: rgba(59, 130, 246, 0.18); }
     .mono {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       font-size: 12px;
@@ -1102,25 +1106,37 @@
 
     function renderTvSessions() {
       const tbody = document.getElementById('tv-sessions-body');
-      if (!cachedTvSessions.length) {
+      const visibleSessions = cachedTvSessions.slice(0, 20);
+      if (!visibleSessions.length) {
         tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--muted);">No TV sessions recorded yet.</td></tr>';
         return;
       }
-      tbody.innerHTML = cachedTvSessions.map(session => `
-        <tr>
-          <td class="mono">${formatTvOn(session.started_at, session.started_epoch)}</td>
+      let prevDay = null;
+      let dayBand = 0;
+      tbody.innerHTML = visibleSessions.map(session => {
+        const tvOnText = formatTvOn(session.started_at, session.started_epoch);
+        const dayKey = tvOnText.slice(0, 10);
+        if (prevDay !== null && dayKey !== prevDay) {
+          dayBand = 1 - dayBand;
+        }
+        prevDay = dayKey;
+        const rowClass = dayBand === 0 ? 'tv-day-even' : 'tv-day-odd';
+        return `
+        <tr class="${rowClass}">
+          <td class="mono">${tvOnText}</td>
           <td class="mono">${session.active ? '<span style="color:var(--green);font-weight:700;">ON NOW</span>' : formatTvOff(session.ended_at, session.ended_epoch)}</td>
           <td style="font-weight:700;">${formatDuration(session.duration_seconds)}</td>
         </tr>
-      `).join('');
+      `;
+      }).join('');
     }
 
     async function loadTvSessions() {
       const tbody = document.getElementById('tv-sessions-body');
       try {
-        const response = await fetch('/api/tv-sessions?limit=1000');
+        const response = await fetch('/api/tv-sessions?limit=20');
         const data = await response.json();
-        cachedTvSessions = data.items || [];
+        cachedTvSessions = (data.items || []).slice(0, 20);
         renderTvSessions();
       } catch (error) {
         console.error('TV session fetch error:', error);
