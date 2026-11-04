@@ -46,7 +46,7 @@
     }
     header {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       justify-content: space-between;
       align-items: center;
       gap: 16px;
@@ -85,7 +85,50 @@
       display: flex;
       align-items: center;
       gap: 12px;
-      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+    .remark-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--panel-alt);
+      color: var(--text);
+    }
+    .remark-btn:hover {
+      border-color: #4b5563;
+      background: #243044;
+    }
+    .remark-dialog-body {
+      display: grid;
+      gap: 14px;
+    }
+    .remark-item {
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .remark-item .remark-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .remark-item a {
+      color: #60a5fa;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      word-break: break-all;
+    }
+    .remark-item a:hover {
+      text-decoration: underline;
     }
     .pill {
       display: inline-flex;
@@ -679,8 +722,14 @@
         </div>
       </div>
       <div class="header-meta">
-        <span class="pill"><span class="dot" id="live-dot"></span> <span id="poll-status">Live Polling (1.5s)</span></span>
-        <a class="nav-link" href="/detail">Detail</a>
+        <button type="button" class="remark-btn" id="remark-button" onclick="openRemarkDialog()" aria-label="App Remarks" title="Production Domain &amp; GitHub Repo">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect x="3.5" y="3.5" width="17" height="17" rx="3.5" stroke="currentColor" stroke-width="1.8"/>
+            <line x1="7.5" y1="8.5" x2="16.5" y2="8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="7.5" y1="12" x2="16.5" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="7.5" y1="15.5" x2="14" y2="15.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -839,6 +888,26 @@
 
   <div class="toast" id="toast"></div>
 
+  <dialog id="remark-dialog" onclick="if (event.target === this) closeRemarkDialog()">
+    <div class="remark-dialog-body">
+      <div>
+        <div class="card-title">Mom on TV — Info</div>
+        <div class="card-subtitle">Production domain &amp; source repository</div>
+      </div>
+      <div class="remark-item">
+        <div class="remark-label">Production Domain</div>
+        <a href="https://tv.usdollar.win" target="_blank" rel="noopener noreferrer">https://tv.usdollar.win</a>
+      </div>
+      <div class="remark-item">
+        <div class="remark-label">GitHub Repository</div>
+        <a href="https://github.com/rolandtalk/tvlighton" target="_blank" rel="noopener noreferrer">https://github.com/rolandtalk/tvlighton</a>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn-primary" onclick="closeRemarkDialog()">Close</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="settings-password-dialog">
     <form class="password-dialog-form" onsubmit="unlockSettings(event)">
       <div>
@@ -921,6 +990,14 @@
       document.getElementById('settings-password').value = '';
       dialog.showModal();
       setTimeout(() => document.getElementById('settings-password').focus(), 50);
+    }
+
+    function openRemarkDialog() {
+      document.getElementById('remark-dialog').showModal();
+    }
+
+    function closeRemarkDialog() {
+      document.getElementById('remark-dialog').close();
     }
 
     function closeSettingsPasswordDialog() {
