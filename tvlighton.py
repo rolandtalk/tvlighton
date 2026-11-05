@@ -162,8 +162,14 @@ def decide_automatic_bulb_action(
     bright_streak: int,
     debounce_readings: int,
     auto_off: bool,
+    tv_standby_now: bool = False,
 ) -> Optional[bool]:
-    """Return True for ON, False for OFF, or None when no relay change is due."""
+    """Return True for ON, False for OFF, or None when no relay change is due.
+
+    ``tv_standby_now`` is True when the latest Tapo A reading is at/below the
+    OFF cutoff. Standby power is unambiguous, so the bulb is switched OFF
+    immediately on that first reading instead of waiting for the debounce.
+    """
     if (
         not bulb_is_on
         and high_streak >= debounce_readings
@@ -171,7 +177,7 @@ def decide_automatic_bulb_action(
     ):
         return True
     if bulb_is_on and (
-        (auto_off and low_streak >= debounce_readings)
+        (auto_off and (tv_standby_now or low_streak >= debounce_readings))
         or bright_streak >= debounce_readings
     ):
         return False
@@ -1088,6 +1094,8 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                 # before polling Tapo B so a slow/offline bulb plug cannot block
                 # opening or closing the viewing session.
                 power_state = classify_tv_power(watts_a, on_watts, on_max_watts, off_watts)
+                # Standby (<= OFF cutoff) is unambiguous, so act on the first reading.
+                tv_standby_now = watts_a <= off_watts
                 if power_state == "on":
                     runtime.high_streak += 1
                     runtime.low_streak = 0
@@ -1111,7 +1119,9 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                         runtime.state_b,
                         runtime.state_a["latency_ms"],
                     )
-                elif runtime.low_streak == debounce_n and prev_a_active is not False:
+                elif (
+                    runtime.low_streak >= debounce_n or tv_standby_now
+                ) and prev_a_active is not False:
                     runtime.history.end_tv_session()
                     if prev_a_active is True:
                         runtime.history.record_operation(
@@ -1119,8 +1129,12 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                             "STATE_CHANGE",
                             f"Tapo A TV Standby/Off Detected ({watts_a:.2f}W)",
                             f"TV power left the On Range at {watts_a:.2f}W ({runtime.state_a['mw']} mW); "
-                            f"On Range is {on_watts:.1f}-{on_max_watts:.1f}W and OFF cutoff is <= {off_watts:.1f}W, "
-                            f"for {debounce_n} consecutive readings",
+                            f"On Range is {on_watts:.1f}-{on_max_watts:.1f}W and OFF cutoff is <= {off_watts:.1f}W"
+                            + (
+                                " (standby detected on first reading)"
+                                if tv_standby_now
+                                else f", for {debounce_n} consecutive readings"
+                            ),
                             runtime.state_a,
                             runtime.state_b,
                             runtime.state_a["latency_ms"],
@@ -1195,6 +1209,7 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                     runtime.bright_streak,
                     debounce_n,
                     auto_off,
+                    tv_standby_now,
                 )
                 if bulb_action is True:
                     _log(
@@ -1218,7 +1233,12 @@ def run_monitor_and_web_server(runtime: TvLightOnRuntime, web_port: int) -> None
                         lat,
                     )
                 elif bulb_action is False:
-                    if auto_off and runtime.low_streak >= debounce_n:
+                    if auto_off and tv_standby_now:
+                        off_reason = (
+                            f"TV turned off ({watts_a:.2f}W <= {off_watts:.1f}W), "
+                            f"switching bulb OFF immediately"
+                        )
+                    elif auto_off and runtime.low_streak >= debounce_n:
                         if watts_a > on_max_watts:
                             off_reason = (
                                 f"TV power above On Range ({watts_a:.2f}W > {on_max_watts:.1f}W) "

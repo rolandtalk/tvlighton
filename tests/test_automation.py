@@ -35,6 +35,12 @@ class AutomationDecisionTest(unittest.TestCase):
         self.assertIsNone(self.decide(True, high=2, bright=1))
         self.assertIsNone(self.decide(False, high=2, dark=1))
 
+    def test_turns_off_immediately_on_first_standby_reading(self):
+        action = tvlighton.decide_automatic_bulb_action(True, 0, 1, 2, 0, 2, True, True)
+        self.assertIs(action, False)
+        # Without auto-off enabled, standby alone does not switch the bulb.
+        self.assertIsNone(tvlighton.decide_automatic_bulb_action(True, 0, 1, 2, 0, 2, False, True))
+
     def test_tv_power_is_on_only_inside_selected_range(self):
         classify = tvlighton.classify_tv_power
         self.assertEqual(classify(40, 40, 120, 5), "on")
